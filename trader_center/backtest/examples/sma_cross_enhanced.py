@@ -72,7 +72,68 @@ class SmaCrossEnhanced(bt.Strategy):
 
     def next(self):
         """每个bar执行一次."""
-        pass
+        # 没有持仓时，检查入场条件
+        if not self.position:
+            if self._can_enter_long():
+                size = self._calculate_position_size()
+                if size:
+                    self.buy(size=size)
+                else:
+                    self.buy()
+
+    def _can_enter_long(self):
+        """检查是否可以开多仓.
+
+        条件:
+        1. 金叉信号
+        2. ADX > 阈值（如果启用ADX过滤）
+        3. 价格在大趋势MA之上（如果启用趋势确认）
+        """
+        # 必须有金叉信号
+        if self.crossover[0] <= 0:
+            return False
+
+        # ADX过滤
+        if self.p.use_adx_filter:
+            if not hasattr(self, 'adx') or self.adx[0] <= self.p.adx_threshold:
+                return False
+
+        # 趋势确认
+        if self.p.use_trend_confirm:
+            if not hasattr(self, 'trend_ma') or self.data.close[0] <= self.trend_ma[0]:
+                return False
+
+        return True
+
+    def _calculate_position_size(self):
+        """计算仓位大小.
+
+        基于ATR的仓位管理:
+        仓位 = (资金 × 风险比例) / (ATR × 止损倍数)
+        """
+        if not self.p.use_volatility_sizing:
+            return None  # 使用默认仓位
+
+        cash = self.broker.getcash()
+        price = self.data.close[0]
+
+        if not hasattr(self, 'atr') or self.atr[0] == 0:
+            return None
+
+        # 计算风险金额
+        risk_amount = cash * self.p.risk_per_trade
+
+        # 计算止损距离
+        stop_distance = self.atr[0] * self.p.stop_loss_atr_mult
+
+        # 计算仓位
+        position_size = risk_amount / stop_distance
+
+        # 应用最大仓位限制
+        max_position_value = cash * self.p.max_position_pct
+        max_position_size = max_position_value / price
+
+        return int(min(position_size, max_position_size))
 
     def notify_order(self, order):
         """订单状态回调."""
