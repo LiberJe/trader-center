@@ -1,1 +1,1 @@
-"""Data Hub module for unified market data access."""
+"""DataHub - Multi-source financial data access layer"""
