@@ -1,1 +1,0 @@
-"""Vectorized backtest engine."""
