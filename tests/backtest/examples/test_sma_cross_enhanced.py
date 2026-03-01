@@ -127,3 +127,44 @@ def test_position_sizing():
     )
 
     assert result is not None
+
+
+def test_full_backtest_with_all_features():
+    """测试启用所有功能的完整回测"""
+    # 创建测试数据 (90个交易日)
+    dates = pd.date_range('2024-01-01', periods=90, freq='B')
+    prices = [100 + i * 0.3 for i in range(90)]  # 稳定上涨趋势
+    df = pd.DataFrame({
+        'open': [p - 1 for p in prices],
+        'high': [p + 2 for p in prices],
+        'low': [p - 2 for p in prices],
+        'close': prices,
+        'volume': [10000] * 90,
+    }, index=dates)
+
+    engine = BacktestEngine(initial_cash=100000, commission=0.0003)
+    result = engine.run(
+        data=df,
+        strategy=SmaCrossEnhanced,
+        params=dict(
+            fast_period=5,
+            slow_period=20,
+            use_adx_filter=True,
+            adx_threshold=20,
+            use_trend_confirm=True,
+            trend_ma_period=60,
+            use_volatility_sizing=True,
+            risk_per_trade=0.02,
+            max_position_pct=0.5,
+            use_stop_loss=True,
+            stop_loss_atr_mult=2.0
+        )
+    )
+
+    assert result is not None
+    assert 'total_return' in result.metrics
+    assert isinstance(result.trades, pd.DataFrame)
+    assert len(result.trades) >= 0
+
+    # 打印报告
+    print(result.report())
