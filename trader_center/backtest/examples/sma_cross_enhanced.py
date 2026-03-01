@@ -198,5 +198,17 @@ class SmaCrossEnhanced(bt.Strategy):
         return False
 
     def notify_order(self, order):
-        """订单状态回调."""
-        pass
+        """订单状态回调.
+
+        记录入场价格和设置止损价。
+        """
+        if order.status in [order.Completed]:
+            if order.isbuy():
+                # 记录入场价格
+                self.entry_price = order.executed.price
+                # 计算止损价格
+                self.stop_price = self._calculate_stop_price(self.entry_price)
+            elif order.issell():
+                # 重置状态
+                self.entry_price = None
+                self.stop_price = None
