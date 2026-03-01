@@ -1,81 +1,71 @@
-"""Database models for the data hub."""
-
-from datetime import date
+from datetime import datetime, date
 from typing import Optional
+from enum import Enum
 
-from sqlalchemy import (
-    Column, Integer, String, Float, Date, DateTime, Boolean,
-    ForeignKey, UniqueConstraint, Index
-)
-from sqlalchemy.orm import DeclarativeBase, relationship
-from sqlalchemy.sql import func
+from pydantic import BaseModel, Field
 
 
-class Base(DeclarativeBase):
-    pass
+class Frequency(str, Enum):
+    """数据频率"""
+    DAILY = "1d"
+    WEEKLY = "1w"
+    MONTHLY = "1m"
+    MIN_1 = "1min"
+    MIN_5 = "5min"
+    MIN_15 = "15min"
+    MIN_30 = "30min"
+    MIN_60 = "60min"
 
 
-class Symbol(Base):
-    __tablename__ = "symbols"
+class BarData(BaseModel):
+    """K线数据模型"""
+    model_config = {"frozen": True}
 
-    id = Column(Integer, primary_key=True)
-    code = Column(String(32), nullable=False, unique=True, index=True)
-    name = Column(String(128), nullable=False)
-    market = Column(String(16), nullable=False, index=True)  # CN, US, HK, CRYPTO
-    exchange = Column(String(16), nullable=False)
-    category = Column(String(16), default="stock")  # stock, index, etf, crypto
-    status = Column(String(16), default="active")  # active, delisted
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    symbol: str = Field(..., description="股票代码，如 000001.SZ")
+    timestamp: datetime = Field(..., description="时间戳")
+    frequency: Frequency = Field(..., description="数据周期")
 
-    daily_bars = relationship("DailyBar", back_populates="symbol", cascade="all, delete-orphan")
-    watchlist_entries = relationship("Watchlist", back_populates="symbol", cascade="all, delete-orphan")
+    open: float = Field(..., description="开盘价")
+    high: float = Field(..., description="最高价")
+    low: float = Field(..., description="最低价")
+    close: float = Field(..., description="收盘价")
+    volume: float = Field(..., description="成交量")
 
-    def __repr__(self) -> str:
-        return f"<Symbol(code='{self.code}', name='{self.name}')>"
-
-
-class DailyBar(Base):
-    __tablename__ = "daily_bars"
-
-    id = Column(Integer, primary_key=True)
-    symbol_id = Column(Integer, ForeignKey("symbols.id", ondelete="CASCADE"), nullable=False)
-    date = Column(Date, nullable=False, index=True)
-    open = Column(Float, nullable=False)
-    high = Column(Float, nullable=False)
-    low = Column(Float, nullable=False)
-    close = Column(Float, nullable=False)
-    volume = Column(Float, nullable=False)
-    amount = Column(Float, nullable=True)
-    adj_factor = Column(Float, default=1.0)
-    is_suspended = Column(Boolean, default=False)
-    created_at = Column(DateTime, server_default=func.now())
-
-    symbol = relationship("Symbol", back_populates="daily_bars")
-
-    __table_args__ = (
-        UniqueConstraint("symbol_id", "date", name="uix_daily_bar_symbol_date"),
-        Index("ix_daily_bars_symbol_date", "symbol_id", "date"),
-    )
-
-    def __repr__(self) -> str:
-        return f"<DailyBar(symbol='{self.symbol.code}', date='{self.date}', close={self.close})>"
+    amount: Optional[float] = Field(None, description="成交额")
+    adj_factor: Optional[float] = Field(None, description="复权因子")
+    is_suspended: bool = Field(False, description="是否停牌")
 
 
-class Watchlist(Base):
-    __tablename__ = "watchlist"
+class SymbolInfo(BaseModel):
+    """股票基础信息"""
+    symbol: str = Field(..., description="股票代码")
+    name: str = Field(..., description="股票名称")
+    exchange: str = Field(..., pattern=r"^(SZ|SH|BJ|HK|US)$")
+    type: str = Field(default="stock", pattern=r"^(stock|index|etf|bond)$")
+    list_date: Optional[date] = None
+    delist_date: Optional[date] = None
+    industry: Optional[str] = None
 
-    id = Column(Integer, primary_key=True)
-    symbol_id = Column(Integer, ForeignKey("symbols.id", ondelete="CASCADE"), nullable=False)
-    group_name = Column(String(32), default="default", nullable=False)
-    notes = Column(String(256), nullable=True)
-    added_at = Column(DateTime, server_default=func.now())
 
-    symbol = relationship("Symbol", back_populates="watchlist_entries")
+class FinancialReport(BaseModel):
+    """财务报告数据"""
+    symbol: str
+    report_date: date
+    report_type: str = Field(..., pattern=r"^(Q1|Q2|Q3|annual)$")
 
-    __table_args__ = (
-        UniqueConstraint("symbol_id", "group_name", name="uix_watchlist_symbol_group"),
-    )
+    revenue: Optional[float] = None
+    net_profit: Optional[float] = None
+    eps: Optional[float] = None
+    roe: Optional[float] = None
+    debt_ratio: Optional[float] = None
 
-    def __repr__(self) -> str:
-        return f"<Watchlist(symbol='{self.symbol.code}', group='{self.group_name}')>"
+    raw_data: Optional[dict] = None
+
+
+class MacroData(BaseModel):
+    """宏观数据"""
+    indicator: str
+    country: str = "CN"
+    timestamp: date
+    value: float
+    period: Optional[str] = None
