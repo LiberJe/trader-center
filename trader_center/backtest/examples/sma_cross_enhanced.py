@@ -56,6 +56,12 @@ class SmaCrossEnhanced(bt.Strategy):
         # 交叉信号
         self.crossover = bt.ind.CrossOver(self.fast_ma, self.slow_ma)
 
+        # ADX趋势过滤
+        if self.p.use_adx_filter:
+            self.adx = bt.ind.AverageDirectionalMovementIndex(
+                period=self.p.adx_period
+            )
+
     def next(self):
         """每个bar执行一次."""
         pass

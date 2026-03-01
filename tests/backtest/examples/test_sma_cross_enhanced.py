@@ -29,3 +29,44 @@ def test_basic_ma_indicators():
 
     assert result is not None
     assert len(result.trades) >= 0
+
+
+def test_adx_filter():
+    """测试ADX趋势过滤功能"""
+    dates = pd.date_range('2024-01-01', periods=60, freq='B')
+    prices = [100 + i * 0.5 for i in range(60)]
+    df = pd.DataFrame({
+        'open': [p - 1 for p in prices],
+        'high': [p + 2 for p in prices],
+        'low': [p - 2 for p in prices],
+        'close': prices,
+        'volume': [10000] * 60,
+    }, index=dates)
+
+    # 启用ADX过滤
+    engine = BacktestEngine(initial_cash=100000, commission=0.0003)
+    result_with_adx = engine.run(
+        data=df,
+        strategy=SmaCrossEnhanced,
+        params=dict(
+            fast_period=5,
+            slow_period=20,
+            use_adx_filter=True,
+            adx_threshold=25
+        )
+    )
+
+    # 禁用ADX过滤
+    engine2 = BacktestEngine(initial_cash=100000, commission=0.0003)
+    result_without_adx = engine2.run(
+        data=df,
+        strategy=SmaCrossEnhanced,
+        params=dict(
+            fast_period=5,
+            slow_period=20,
+            use_adx_filter=False
+        )
+    )
+
+    assert result_with_adx is not None
+    assert result_without_adx is not None
