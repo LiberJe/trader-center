@@ -11,19 +11,22 @@ from trader_center.backtest.examples import SmaCrossEnhanced
 
 def create_sample_data(days=120):
     """创建示例数据."""
-    dates = pd.date_range('2024-01-01', periods=days, freq='B')
+    dates = pd.date_range("2024-01-01", periods=days, freq="B")
     prices = [100]
     for _ in range(1, days):
         change = (np.random.random() - 0.48) * 2  # 轻微上涨趋势
         prices.append(prices[-1] * (1 + change / 100))
 
-    df = pd.DataFrame({
-        'open': [p * (1 - 0.005) for p in prices],
-        'high': [p * (1 + 0.01) for p in prices],
-        'low': [p * (1 - 0.01) for p in prices],
-        'close': prices,
-        'volume': [10000] * days,
-    }, index=dates)
+    df = pd.DataFrame(
+        {
+            "open": [p * (1 - 0.005) for p in prices],
+            "high": [p * (1 + 0.01) for p in prices],
+            "low": [p * (1 - 0.01) for p in prices],
+            "close": prices,
+            "volume": [10000] * days,
+        },
+        index=dates,
+    )
 
     return df
 
@@ -40,11 +43,7 @@ def main():
     print(f"数据条数: {len(df)}")
 
     # 配置回测引擎
-    engine = BacktestEngine(
-        initial_cash=100000,
-        commission=0.0003,  # 0.03% 手续费
-        stake=100
-    )
+    engine = BacktestEngine(initial_cash=100000, commission=0.0003, stake=100)  # 0.03% 手续费
 
     # 运行回测
     result = engine.run(
@@ -66,8 +65,8 @@ def main():
             max_position_pct=0.5,
             # 止损
             use_stop_loss=True,
-            stop_loss_atr_mult=2.0
-        )
+            stop_loss_atr_mult=2.0,
+        ),
     )
 
     # 打印报告
@@ -79,5 +78,5 @@ def main():
     print("\n结果已保存到 results/ 目录")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

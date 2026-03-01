@@ -31,20 +31,20 @@ class SmaCrossEnhanced(bt.Strategy):
     """
 
     params = (
-        ('fast_period', 5),
-        ('slow_period', 20),
-        ('use_adx_filter', True),
-        ('adx_period', 14),
-        ('adx_threshold', 25),
-        ('use_trend_confirm', True),
-        ('trend_ma_period', 60),
-        ('use_volatility_sizing', True),
-        ('atr_period', 14),
-        ('risk_per_trade', 0.02),
-        ('max_position_pct', 0.5),
-        ('use_stop_loss', True),
-        ('stop_loss_atr_mult', 2.0),
-        ('use_trailing_stop', False),
+        ("fast_period", 5),
+        ("slow_period", 20),
+        ("use_adx_filter", True),
+        ("adx_period", 14),
+        ("adx_threshold", 25),
+        ("use_trend_confirm", True),
+        ("trend_ma_period", 60),
+        ("use_volatility_sizing", True),
+        ("atr_period", 14),
+        ("risk_per_trade", 0.02),
+        ("max_position_pct", 0.5),
+        ("use_stop_loss", True),
+        ("stop_loss_atr_mult", 2.0),
+        ("use_trailing_stop", False),
     )
 
     def __init__(self):
@@ -58,9 +58,7 @@ class SmaCrossEnhanced(bt.Strategy):
 
         # ADX趋势过滤
         if self.p.use_adx_filter:
-            self.adx = bt.ind.AverageDirectionalMovementIndex(
-                period=self.p.adx_period
-            )
+            self.adx = bt.ind.AverageDirectionalMovementIndex(period=self.p.adx_period)
 
         # 大趋势确认
         if self.p.use_trend_confirm:
@@ -102,7 +100,7 @@ class SmaCrossEnhanced(bt.Strategy):
                 should_exit = True
 
             # 趋势反转出场（价格跌破大趋势MA）
-            if self.p.use_trend_confirm and hasattr(self, 'trend_ma'):
+            if self.p.use_trend_confirm and hasattr(self, "trend_ma"):
                 if self.data.close[0] < self.trend_ma[0]:
                     should_exit = True
 
@@ -123,12 +121,12 @@ class SmaCrossEnhanced(bt.Strategy):
 
         # ADX过滤
         if self.p.use_adx_filter:
-            if not hasattr(self, 'adx') or self.adx[0] <= self.p.adx_threshold:
+            if not hasattr(self, "adx") or self.adx[0] <= self.p.adx_threshold:
                 return False
 
         # 趋势确认
         if self.p.use_trend_confirm:
-            if not hasattr(self, 'trend_ma') or self.data.close[0] <= self.trend_ma[0]:
+            if not hasattr(self, "trend_ma") or self.data.close[0] <= self.trend_ma[0]:
                 return False
 
         return True
@@ -145,7 +143,7 @@ class SmaCrossEnhanced(bt.Strategy):
         cash = self.broker.getcash()
         price = self.data.close[0]
 
-        if not hasattr(self, 'atr') or self.atr[0] == 0:
+        if not hasattr(self, "atr") or self.atr[0] == 0:
             return None
 
         # 计算风险金额
@@ -168,7 +166,7 @@ class SmaCrossEnhanced(bt.Strategy):
         if not self.p.use_stop_loss:
             return None
 
-        if not hasattr(self, 'atr') or self.atr[0] == 0:
+        if not hasattr(self, "atr") or self.atr[0] == 0:
             return None
 
         stop_distance = self.atr[0] * self.p.stop_loss_atr_mult
@@ -179,7 +177,7 @@ class SmaCrossEnhanced(bt.Strategy):
         if not self.p.use_trailing_stop or self.stop_price is None:
             return
 
-        if not hasattr(self, 'atr') or self.atr[0] == 0:
+        if not hasattr(self, "atr") or self.atr[0] == 0:
             return
 
         # 新高时提高止损
