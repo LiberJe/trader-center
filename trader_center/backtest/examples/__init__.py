@@ -1,5 +1,6 @@
-"""Example strategies for backtest engine."""
+"""Example strategies."""
 
 from .sma_cross import SmaCross
+from .sma_cross_enhanced import SmaCrossEnhanced
 
-__all__ = ['SmaCross']
+__all__ = ['SmaCross', 'SmaCrossEnhanced']
