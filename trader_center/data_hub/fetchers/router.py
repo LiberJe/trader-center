@@ -27,11 +27,7 @@ class FetcherRouter:
         return [f for f in self.fetchers if f.check_available()]
 
     def fetch_bars(
-        self,
-        symbol: str,
-        start: datetime,
-        end: datetime,
-        frequency: str
+        self, symbol: str, start: datetime, end: datetime, frequency: str
     ) -> Optional[pd.DataFrame]:
         """
         从多个源获取数据并合并
@@ -62,8 +58,7 @@ class FetcherRouter:
         return self._merge_results(results)
 
     def _merge_results(
-        self,
-        results: List[Tuple[str, int, pd.DataFrame]]
+        self, results: List[Tuple[str, int, pd.DataFrame]]
     ) -> pd.DataFrame:
         """
         合并多源数据
@@ -74,15 +69,15 @@ class FetcherRouter:
 
         for src_name, _, src_df in results[1:]:
             # 找出 base 中缺失的日期
-            existing_dates = set(merged['timestamp'])
-            missing = src_df[~src_df['timestamp'].isin(existing_dates)]
+            existing_dates = set(merged["timestamp"])
+            missing = src_df[~src_df["timestamp"].isin(existing_dates)]
 
             if not missing.empty:
                 logger.debug(f"{src_name}: complementing {len(missing)} missing bars")
                 merged = pd.concat([merged, missing], ignore_index=True)
 
         # 排序
-        merged = merged.sort_values('timestamp').reset_index(drop=True)
+        merged = merged.sort_values("timestamp").reset_index(drop=True)
         return merged
 
     def fetch_symbols(self) -> List[SymbolInfo]:

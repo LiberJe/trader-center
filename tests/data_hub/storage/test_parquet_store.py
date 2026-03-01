@@ -23,25 +23,30 @@ class TestParquetStorage:
                 symbol="000001.SZ",
                 timestamp=datetime(2024, 1, 1),
                 frequency=Frequency.DAILY,
-                open=10.0, high=11.0, low=9.5, close=10.5, volume=10000.0
+                open=10.0,
+                high=11.0,
+                low=9.5,
+                close=10.5,
+                volume=10000.0,
             ),
             BarData(
                 symbol="000001.SZ",
                 timestamp=datetime(2024, 1, 2),
                 frequency=Frequency.DAILY,
-                open=10.5, high=10.8, low=10.2, close=10.6, volume=8000.0
+                open=10.5,
+                high=10.8,
+                low=10.2,
+                close=10.6,
+                volume=8000.0,
             ),
         ]
         storage.save_bars(bars)
 
         df = storage.get_bars(
-            "000001.SZ",
-            datetime(2024, 1, 1),
-            datetime(2024, 1, 2),
-            "1d"
+            "000001.SZ", datetime(2024, 1, 1), datetime(2024, 1, 2), "1d"
         )
         assert len(df) == 2
-        assert df.iloc[0]['close'] == 10.5
+        assert df.iloc[0]["close"] == 10.5
 
     def test_get_data_range(self, storage):
         bars = [
@@ -49,7 +54,11 @@ class TestParquetStorage:
                 symbol="000001.SZ",
                 timestamp=datetime(2024, 1, 15),
                 frequency=Frequency.DAILY,
-                open=10.0, high=11.0, low=9.5, close=10.5, volume=10000.0
+                open=10.0,
+                high=11.0,
+                low=9.5,
+                close=10.5,
+                volume=10000.0,
             ),
         ]
         storage.save_bars(bars)
@@ -65,7 +74,11 @@ class TestParquetStorage:
                 symbol="000001.SZ",
                 timestamp=datetime(2024, 1, 1),
                 frequency=Frequency.DAILY,
-                open=10.0, high=11.0, low=9.5, close=10.5, volume=10000.0
+                open=10.0,
+                high=11.0,
+                low=9.5,
+                close=10.5,
+                volume=10000.0,
             ),
         ]
         bars2 = [
@@ -73,16 +86,17 @@ class TestParquetStorage:
                 symbol="000001.SZ",
                 timestamp=datetime(2024, 1, 2),
                 frequency=Frequency.DAILY,
-                open=10.5, high=10.8, low=10.2, close=10.6, volume=8000.0
+                open=10.5,
+                high=10.8,
+                low=10.2,
+                close=10.6,
+                volume=8000.0,
             ),
         ]
         storage.save_bars(bars1)
         storage.save_bars(bars2)
 
         df = storage.get_bars(
-            "000001.SZ",
-            datetime(2024, 1, 1),
-            datetime(2024, 1, 2),
-            "1d"
+            "000001.SZ", datetime(2024, 1, 1), datetime(2024, 1, 2), "1d"
         )
         assert len(df) == 2

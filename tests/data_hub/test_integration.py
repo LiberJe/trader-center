@@ -33,10 +33,10 @@ class TestIntegration:
 
             # 首次调用后应该有缓存
             stats1 = dh.get_cache_stats()
-            assert stats1['size'] >= 0
+            assert stats1["size"] >= 0
 
     def test_clear_cache(self):
         """测试清空缓存"""
         dh.clear_cache()
         stats = dh.get_cache_stats()
-        assert stats['size'] == 0
+        assert stats["size"] == 0

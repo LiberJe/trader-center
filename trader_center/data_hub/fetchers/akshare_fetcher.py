@@ -20,6 +20,7 @@ class AkshareFetcher(DataFetcher):
         """延迟导入 akshare"""
         if self._ak is None:
             import akshare as ak
+
             self._ak = ak
         return self._ak
 
@@ -27,6 +28,7 @@ class AkshareFetcher(DataFetcher):
         """检查 akshare 是否可用"""
         try:
             import akshare as ak
+
             # 简单测试调用
             _ = ak.stock_zh_a_spot_em()
             return True
@@ -37,7 +39,9 @@ class AkshareFetcher(DataFetcher):
         """解析 symbol: '000001.SZ' -> ('000001', 'SZ')"""
         parts = symbol.split(".")
         if len(parts) != 2:
-            raise ValueError(f"Invalid symbol format: {symbol}, expected 'code.exchange'")
+            raise ValueError(
+                f"Invalid symbol format: {symbol}, expected 'code.exchange'"
+            )
         return parts[0], parts[1]
 
     def _map_frequency(self, frequency: str) -> str:
@@ -55,11 +59,7 @@ class AkshareFetcher(DataFetcher):
         return mapping.get(frequency, "daily")
 
     def get_bars(
-        self,
-        symbol: str,
-        start: datetime,
-        end: datetime,
-        frequency: str
+        self, symbol: str, start: datetime, end: datetime, frequency: str
     ) -> List[BarData]:
         """获取K线数据"""
         ak = self._get_ak()
@@ -72,7 +72,7 @@ class AkshareFetcher(DataFetcher):
             period=period,
             start_date=start.strftime("%Y%m%d"),
             end_date=end.strftime("%Y%m%d"),
-            adjust="qfq"  # 前复权
+            adjust="qfq",  # 前复权
         )
 
         if df.empty:
@@ -83,14 +83,22 @@ class AkshareFetcher(DataFetcher):
         for _, row in df.iterrows():
             bar = BarData(
                 symbol=symbol,
-                timestamp=datetime.strptime(str(row['日期']), "%Y-%m-%d"),
-                frequency=Frequency(frequency) if frequency in [f.value for f in Frequency] else Frequency.DAILY,
-                open=float(row['开盘']),
-                high=float(row['最高']),
-                low=float(row['最低']),
-                close=float(row['收盘']),
-                volume=float(row['成交量']),
-                amount=float(row['成交额']) if '成交额' in row and pd.notna(row['成交额']) else None,
+                timestamp=datetime.strptime(str(row["日期"]), "%Y-%m-%d"),
+                frequency=(
+                    Frequency(frequency)
+                    if frequency in [f.value for f in Frequency]
+                    else Frequency.DAILY
+                ),
+                open=float(row["开盘"]),
+                high=float(row["最高"]),
+                low=float(row["最低"]),
+                close=float(row["收盘"]),
+                volume=float(row["成交量"]),
+                amount=(
+                    float(row["成交额"])
+                    if "成交额" in row and pd.notna(row["成交额"])
+                    else None
+                ),
             )
             bars.append(bar)
 
@@ -104,22 +112,26 @@ class AkshareFetcher(DataFetcher):
         symbols = []
         for _, row in df.iterrows():
             # 解析代码和交易所
-            code = str(row['代码'])
+            code = str(row["代码"])
             # 根据代码判断交易所
-            if code.startswith(('60', '68', '88', '89')):
+            if code.startswith(("60", "68", "88", "89")):
                 exchange = "SH"
-            elif code.startswith(('00', '30', '82', '83')):
+            elif code.startswith(("00", "30", "82", "83")):
                 exchange = "SZ"
-            elif code.startswith(('43', '83', '87', '88')):
+            elif code.startswith(("43", "83", "87", "88")):
                 exchange = "BJ"
             else:
                 exchange = "SH"  # 默认
 
             symbol = SymbolInfo(
                 symbol=f"{code}.{exchange}",
-                name=str(row['名称']),
+                name=str(row["名称"]),
                 exchange=exchange,
-                industry=str(row.get('所属行业', '')) if pd.notna(row.get('所属行业')) else None
+                industry=(
+                    str(row.get("所属行业", ""))
+                    if pd.notna(row.get("所属行业"))
+                    else None
+                ),
             )
             symbols.append(symbol)
 

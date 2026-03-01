@@ -6,6 +6,7 @@ from dataclasses import dataclass
 @dataclass
 class DataHubConfig:
     """DataHub 配置"""
+
     data_dir: Path = Path.home() / ".trader_center" / "data"
     cache_size: int = 1000
     sqlite_db_name: str = "metadata.db"

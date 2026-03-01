@@ -7,12 +7,7 @@ class CacheKeyBuilder:
     """缓存键生成器"""
 
     @staticmethod
-    def for_bars(
-        symbol: str,
-        start: datetime,
-        end: datetime,
-        frequency: str
-    ) -> str:
+    def for_bars(symbol: str, start: datetime, end: datetime, frequency: str) -> str:
         """K线数据缓存键"""
         params = f"{symbol}:{start.isoformat()}:{end.isoformat()}:{frequency}"
         hash_val = hashlib.md5(params.encode()).hexdigest()[:12]

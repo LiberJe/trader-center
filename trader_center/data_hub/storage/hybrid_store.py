@@ -23,11 +23,7 @@ class HybridStorage(Storage):
         self.parquet.save_bars(bars)
 
     def get_bars(
-        self,
-        symbol: str,
-        start: datetime,
-        end: datetime,
-        frequency: str
+        self, symbol: str, start: datetime, end: datetime, frequency: str
     ) -> pd.DataFrame:
         """从 Parquet 获取K线数据"""
         return self.parquet.get_bars(symbol, start, end, frequency)
@@ -40,6 +36,8 @@ class HybridStorage(Storage):
         """保存股票列表到 SQLite"""
         self.sqlite.save_symbols(symbols)
 
-    def get_data_range(self, symbol: str, frequency: str) -> Tuple[Optional[datetime], Optional[datetime]]:
+    def get_data_range(
+        self, symbol: str, frequency: str
+    ) -> Tuple[Optional[datetime], Optional[datetime]]:
         """获取K线数据范围"""
         return self.parquet.get_data_range(symbol, frequency)

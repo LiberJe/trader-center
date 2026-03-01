@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 class Frequency(str, Enum):
     """数据频率"""
+
     DAILY = "1d"
     WEEKLY = "1w"
     MONTHLY = "1m"
@@ -19,6 +20,7 @@ class Frequency(str, Enum):
 
 class BarData(BaseModel):
     """K线数据模型"""
+
     model_config = {"frozen": True}
 
     symbol: str = Field(..., description="股票代码，如 000001.SZ")
@@ -38,6 +40,7 @@ class BarData(BaseModel):
 
 class SymbolInfo(BaseModel):
     """股票基础信息"""
+
     symbol: str = Field(..., description="股票代码")
     name: str = Field(..., description="股票名称")
     exchange: str = Field(..., pattern=r"^(SZ|SH|BJ|HK|US)$")
@@ -49,6 +52,7 @@ class SymbolInfo(BaseModel):
 
 class FinancialReport(BaseModel):
     """财务报告数据"""
+
     symbol: str
     report_date: date
     report_type: str = Field(..., pattern=r"^(Q1|Q2|Q3|annual)$")
@@ -64,6 +68,7 @@ class FinancialReport(BaseModel):
 
 class MacroData(BaseModel):
     """宏观数据"""
+
     indicator: str
     country: str = "CN"
     timestamp: date

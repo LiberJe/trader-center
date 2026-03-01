@@ -16,11 +16,7 @@ class Storage(ABC):
 
     @abstractmethod
     def get_bars(
-        self,
-        symbol: str,
-        start: datetime,
-        end: datetime,
-        frequency: str
+        self, symbol: str, start: datetime, end: datetime, frequency: str
     ) -> pd.DataFrame:
         """获取K线数据"""
         pass
@@ -31,7 +27,9 @@ class Storage(ABC):
         pass
 
     @abstractmethod
-    def get_data_range(self, symbol: str, frequency: str) -> Tuple[Optional[datetime], Optional[datetime]]:
+    def get_data_range(
+        self, symbol: str, frequency: str
+    ) -> Tuple[Optional[datetime], Optional[datetime]]:
         """获取本地已有数据的时间范围"""
         pass
 

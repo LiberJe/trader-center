@@ -39,12 +39,7 @@ class CacheManager:
 
         return self._cache[key]
 
-    def set(
-        self,
-        key: str,
-        value: Any,
-        ttl: Optional[int] = None
-    ) -> None:
+    def set(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
         """设置缓存"""
         # 如果已存在，先删除
         if key in self._cache:
@@ -88,5 +83,5 @@ class CacheManager:
             "max_size": self.max_size,
             "hits": self._hit_count,
             "misses": self._miss_count,
-            "hit_rate": f"{hit_rate:.2%}"
+            "hit_rate": f"{hit_rate:.2%}",
         }

@@ -18,7 +18,9 @@ class ParquetStorage(Storage):
 
     def _get_bar_path(self, symbol: str, frequency: str) -> Path:
         """获取 Parquet 文件路径"""
-        freq_dir = self.config.bars_dir / frequency.replace("1d", "daily").replace("1min", "min1")
+        freq_dir = self.config.bars_dir / frequency.replace("1d", "daily").replace(
+            "1min", "min1"
+        )
         freq_dir.mkdir(exist_ok=True)
         return freq_dir / f"{symbol}.parquet"
 
@@ -43,38 +45,39 @@ class ParquetStorage(Storage):
         file_path = self._get_bar_path(symbol, frequency)
 
         # 新数据转换为 DataFrame
-        new_df = pd.DataFrame([{
-            'timestamp': bar.timestamp,
-            'open': bar.open,
-            'high': bar.high,
-            'low': bar.low,
-            'close': bar.close,
-            'volume': bar.volume,
-            'amount': bar.amount,
-            'adj_factor': bar.adj_factor,
-            'is_suspended': bar.is_suspended
-        } for bar in bars])
+        new_df = pd.DataFrame(
+            [
+                {
+                    "timestamp": bar.timestamp,
+                    "open": bar.open,
+                    "high": bar.high,
+                    "low": bar.low,
+                    "close": bar.close,
+                    "volume": bar.volume,
+                    "amount": bar.amount,
+                    "adj_factor": bar.adj_factor,
+                    "is_suspended": bar.is_suspended,
+                }
+                for bar in bars
+            ]
+        )
 
         if file_path.exists():
             # 读取现有数据
             existing_df = pq.read_table(file_path).to_pandas()
             # 合并并去重
             combined = pd.concat([existing_df, new_df], ignore_index=True)
-            combined = combined.drop_duplicates(subset=['timestamp'], keep='first')
-            combined = combined.sort_values('timestamp')
+            combined = combined.drop_duplicates(subset=["timestamp"], keep="first")
+            combined = combined.sort_values("timestamp")
         else:
-            combined = new_df.sort_values('timestamp')
+            combined = new_df.sort_values("timestamp")
 
         # 写入 Parquet
         table = pa.Table.from_pandas(combined)
         pq.write_table(table, file_path)
 
     def get_bars(
-        self,
-        symbol: str,
-        start: datetime,
-        end: datetime,
-        frequency: str
+        self, symbol: str, start: datetime, end: datetime, frequency: str
     ) -> pd.DataFrame:
         """获取K线数据"""
         file_path = self._get_bar_path(symbol, frequency)
@@ -83,10 +86,12 @@ class ParquetStorage(Storage):
             return pd.DataFrame()
 
         df = pq.read_table(file_path).to_pandas()
-        mask = (df['timestamp'] >= start) & (df['timestamp'] <= end)
+        mask = (df["timestamp"] >= start) & (df["timestamp"] <= end)
         return df[mask].copy()
 
-    def get_data_range(self, symbol: str, frequency: str) -> Tuple[Optional[datetime], Optional[datetime]]:
+    def get_data_range(
+        self, symbol: str, frequency: str
+    ) -> Tuple[Optional[datetime], Optional[datetime]]:
         """获取本地已有数据的时间范围"""
         file_path = self._get_bar_path(symbol, frequency)
 
@@ -97,7 +102,7 @@ class ParquetStorage(Storage):
         if df.empty:
             return None, None
 
-        return df['timestamp'].min(), df['timestamp'].max()
+        return df["timestamp"].min(), df["timestamp"].max()
 
     def get_symbols(self, exchange: Optional[str] = None) -> List:
         """Parquet 不存储股票列表"""

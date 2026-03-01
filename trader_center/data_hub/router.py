@@ -30,11 +30,7 @@ class DataRouter:
         self.fetcher_router.register(fetcher)
 
     def get_bars(
-        self,
-        symbol: str,
-        start: datetime,
-        end: datetime,
-        frequency: str
+        self, symbol: str, start: datetime, end: datetime, frequency: str
     ) -> pd.DataFrame:
         """
         获取K线数据（带增量更新）
@@ -55,7 +51,9 @@ class DataRouter:
         all_new_data = []
         for miss_start, miss_end in missing_ranges:
             logger.info(f"Fetching missing data: {symbol} [{miss_start} to {miss_end}]")
-            fetched = self.fetcher_router.fetch_bars(symbol, miss_start, miss_end, frequency)
+            fetched = self.fetcher_router.fetch_bars(
+                symbol, miss_start, miss_end, frequency
+            )
             if fetched is not None and not fetched.empty:
                 all_new_data.append(fetched)
 
@@ -71,8 +69,8 @@ class DataRouter:
             return new_df
         else:
             combined = pd.concat([local_df, new_df], ignore_index=True)
-            combined = combined.drop_duplicates(subset=['timestamp'], keep='first')
-            return combined.sort_values('timestamp').reset_index(drop=True)
+            combined = combined.drop_duplicates(subset=["timestamp"], keep="first")
+            return combined.sort_values("timestamp").reset_index(drop=True)
 
     def _calculate_missing_ranges(
         self,
@@ -80,7 +78,7 @@ class DataRouter:
         requested_start: datetime,
         requested_end: datetime,
         symbol: str,
-        frequency: str
+        frequency: str,
     ) -> List[Tuple[datetime, datetime]]:
         """计算需要获取的缺失时间段"""
         # 获取本地数据的实际范围

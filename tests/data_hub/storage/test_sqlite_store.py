@@ -15,7 +15,9 @@ class TestSQLiteStorage:
         # ignore_cleanup_errors=True for Windows SQLite file locking
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
             # Use unique db name per test to avoid Windows file locking issues
-            config = DataHubConfig(data_dir=tmpdir, sqlite_db_name=f"test_{uuid.uuid4().hex}.db")
+            config = DataHubConfig(
+                data_dir=tmpdir, sqlite_db_name=f"test_{uuid.uuid4().hex}.db"
+            )
             store = SQLiteStorage(config)
             yield store
 

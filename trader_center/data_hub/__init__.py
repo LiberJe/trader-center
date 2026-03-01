@@ -50,6 +50,7 @@ def _init_default():
     # 尝试注册 akshare
     try:
         from trader_center.data_hub.fetchers.akshare_fetcher import AkshareFetcher
+
         _router.register_fetcher(AkshareFetcher())
         logger.info("Akshare fetcher registered automatically")
     except ImportError:
@@ -79,6 +80,7 @@ def configure(
     # 重新注册默认 fetcher
     try:
         from trader_center.data_hub.fetchers.akshare_fetcher import AkshareFetcher
+
         _router.register_fetcher(AkshareFetcher())
     except ImportError:
         pass

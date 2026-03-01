@@ -13,11 +13,7 @@ class DataFetcher(ABC):
 
     @abstractmethod
     def get_bars(
-        self,
-        symbol: str,
-        start: datetime,
-        end: datetime,
-        frequency: str
+        self, symbol: str, start: datetime, end: datetime, frequency: str
     ) -> List[BarData]:
         """获取K线数据"""
         pass
