@@ -70,3 +70,31 @@ def test_adx_filter():
 
     assert result_with_adx is not None
     assert result_without_adx is not None
+
+
+def test_trend_confirmation():
+    """测试多时间周期趋势确认"""
+    dates = pd.date_range('2024-01-01', periods=80, freq='B')
+    prices = [100 + i * 0.5 for i in range(80)]
+    df = pd.DataFrame({
+        'open': [p - 1 for p in prices],
+        'high': [p + 2 for p in prices],
+        'low': [p - 2 for p in prices],
+        'close': prices,
+        'volume': [10000] * 80,
+    }, index=dates)
+
+    # 启用趋势确认
+    engine = BacktestEngine(initial_cash=100000, commission=0.0003)
+    result = engine.run(
+        data=df,
+        strategy=SmaCrossEnhanced,
+        params=dict(
+            fast_period=5,
+            slow_period=20,
+            use_trend_confirm=True,
+            trend_ma_period=60
+        )
+    )
+
+    assert result is not None

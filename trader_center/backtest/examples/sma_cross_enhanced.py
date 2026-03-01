@@ -62,6 +62,10 @@ class SmaCrossEnhanced(bt.Strategy):
                 period=self.p.adx_period
             )
 
+        # 大趋势确认
+        if self.p.use_trend_confirm:
+            self.trend_ma = bt.ind.SMA(period=self.p.trend_ma_period)
+
     def next(self):
         """每个bar执行一次."""
         pass
