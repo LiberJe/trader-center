@@ -70,6 +70,11 @@ class SmaCrossEnhanced(bt.Strategy):
         if self.p.use_volatility_sizing or self.p.use_stop_loss:
             self.atr = bt.ind.ATR(period=self.p.atr_period)
 
+        # 状态变量
+        self.entry_price = None
+        self.stop_price = None
+        self.stop_order = None
+
     def next(self):
         """每个bar执行一次."""
         # 没有持仓时，检查入场条件
@@ -80,6 +85,29 @@ class SmaCrossEnhanced(bt.Strategy):
                     self.buy(size=size)
                 else:
                     self.buy()
+        else:
+            # 有持仓时，更新移动止损
+            if self.p.use_trailing_stop:
+                self._update_trailing_stop()
+
+            # 检查止损或死叉出场
+            should_exit = False
+
+            # 死叉信号
+            if self.crossover[0] < 0:
+                should_exit = True
+
+            # 止损触发
+            if self._check_stop_exit():
+                should_exit = True
+
+            # 趋势反转出场（价格跌破大趋势MA）
+            if self.p.use_trend_confirm and hasattr(self, 'trend_ma'):
+                if self.data.close[0] < self.trend_ma[0]:
+                    should_exit = True
+
+            if should_exit:
+                self.close()
 
     def _can_enter_long(self):
         """检查是否可以开多仓.
@@ -134,6 +162,40 @@ class SmaCrossEnhanced(bt.Strategy):
         max_position_size = max_position_value / price
 
         return int(min(position_size, max_position_size))
+
+    def _calculate_stop_price(self, entry_price):
+        """计算止损价格."""
+        if not self.p.use_stop_loss:
+            return None
+
+        if not hasattr(self, 'atr') or self.atr[0] == 0:
+            return None
+
+        stop_distance = self.atr[0] * self.p.stop_loss_atr_mult
+        return entry_price - stop_distance
+
+    def _update_trailing_stop(self):
+        """更新移动止损价格."""
+        if not self.p.use_trailing_stop or self.stop_price is None:
+            return
+
+        if not hasattr(self, 'atr') or self.atr[0] == 0:
+            return
+
+        # 新高时提高止损
+        new_stop = self.data.close[0] - self.atr[0] * self.p.stop_loss_atr_mult
+        if new_stop > self.stop_price:
+            self.stop_price = new_stop
+
+    def _check_stop_exit(self):
+        """检查是否触发止损出场."""
+        if self.stop_price is None:
+            return False
+
+        if self.data.close[0] <= self.stop_price:
+            return True
+
+        return False
 
     def notify_order(self, order):
         """订单状态回调."""
