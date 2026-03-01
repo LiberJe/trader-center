@@ -74,3 +74,47 @@ class MacroData(BaseModel):
     timestamp: date
     value: float
     period: Optional[str] = None
+
+
+class MarketFundFlow(BaseModel):
+    """大盘资金流向"""
+
+    model_config = {"frozen": True}
+
+    date: date
+    market: str  # sh/sz/all
+    main_force_net: float  # 主力净流入(亿元)
+    super_large_net: float  # 超大单净流入
+    large_net: float  # 大单净流入
+    medium_net: float  # 中单净流入
+    small_net: float  # 小单净流入
+    total_amount: float  # 总成交额
+
+
+class StockFundFlow(BaseModel):
+    """个股资金流向"""
+
+    model_config = {"frozen": True}
+
+    date: date
+    symbol: str
+    name: str
+    close_price: float
+    change_pct: float
+    fund_flow: float  # 净流入(万元)
+    flow_ratio: float  # 净流占比
+    main_force_net: float  # 主力净流入
+
+
+class SectorFundFlow(BaseModel):
+    """板块资金流向"""
+
+    model_config = {"frozen": True}
+
+    date: date
+    sector_type: str  # industry/concept
+    sector_name: str
+    fund_flow: float
+    change_pct: float
+    leading_stock: str
+    leading_stock_change: float

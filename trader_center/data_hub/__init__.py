@@ -7,7 +7,7 @@ Example:
 """
 
 from datetime import datetime, date
-from typing import Optional, Union, List
+from typing import Optional, Union, List, Dict, Any
 import pandas as pd
 import logging
 
@@ -183,10 +183,189 @@ def clear_cache():
     cache.clear()
 
 
+def get_market_fund_flow(target_date: Optional[date] = None) -> Optional[pd.DataFrame]:
+    """
+    获取大盘资金流向
+
+    Parameters
+    ----------
+    target_date : date, optional
+        目标日期，默认为今日
+
+    Returns
+    -------
+    pd.DataFrame or None
+        columns: [date, market, main_force_net, super_large_net, large_net,
+                 medium_net, small_net, total_amount]
+    """
+    router = _get_router()
+    cache = _get_cache()
+
+    target_date = target_date or date.today()
+    cache_key = CacheKeyBuilder.for_bars("market_fund_flow", target_date, target_date, "1d")
+
+    # 尝试读取缓存
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    # 先尝试从存储获取
+    stored = router.storage.get_market_fund_flow(target_date)
+    if stored:
+        df = pd.DataFrame([stored.model_dump()])
+        cache.set(cache_key, df, ttl=300)
+        return df
+
+    # 从 fetcher 获取
+    fetcher = None
+    for f in router.fetcher_router.fetchers:
+        if hasattr(f, 'get_market_fund_flow'):
+            fetcher = f
+            break
+
+    if fetcher is None:
+        logger.warning("No fetcher supports fund flow data")
+        return None
+
+    data = fetcher.get_market_fund_flow(target_date)
+    if data is None:
+        return None
+
+    # 保存到存储
+    router.storage.save_market_fund_flow(data)
+
+    df = pd.DataFrame([data.model_dump()])
+    cache.set(cache_key, df, ttl=300)
+    return df
+
+
+def get_stock_fund_flow_rank(
+    target_date: Optional[date] = None, top_n: int = 100
+) -> pd.DataFrame:
+    """
+    获取个股资金流向排名
+
+    Parameters
+    ----------
+    target_date : date, optional
+        目标日期，默认为今日
+    top_n : int
+        返回前N条记录
+
+    Returns
+    -------
+    pd.DataFrame
+        columns: [date, symbol, name, close_price, change_pct,
+                 fund_flow, flow_ratio, main_force_net]
+    """
+    router = _get_router()
+    cache = _get_cache()
+
+    target_date = target_date or date.today()
+    cache_key = f"stock_fund_flow:{target_date.isoformat()}:{top_n}"
+
+    # 尝试读取缓存
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    # 先尝试从存储获取
+    stored = router.storage.get_stock_fund_flow(target_date, limit=top_n)
+    if stored and len(stored) >= top_n:
+        df = pd.DataFrame([s.model_dump() for s in stored])
+        cache.set(cache_key, df, ttl=300)
+        return df
+
+    # 从 fetcher 获取
+    fetcher = None
+    for f in router.fetcher_router.fetchers:
+        if hasattr(f, 'get_stock_fund_flow_rank'):
+            fetcher = f
+            break
+
+    if fetcher is None:
+        logger.warning("No fetcher supports fund flow data")
+        return pd.DataFrame()
+
+    data = fetcher.get_stock_fund_flow_rank(target_date, top_n=top_n)
+    if not data:
+        return pd.DataFrame()
+
+    # 保存到存储
+    router.storage.save_stock_fund_flow(data)
+
+    df = pd.DataFrame([d.model_dump() for d in data])
+    cache.set(cache_key, df, ttl=300)
+    return df
+
+
+def get_sector_fund_flow(
+    target_date: Optional[date] = None, sector_type: str = "industry"
+) -> pd.DataFrame:
+    """
+    获取板块资金流向
+
+    Parameters
+    ----------
+    target_date : date, optional
+        目标日期，默认为今日
+    sector_type : str
+        板块类型: "industry" 或 "concept"
+
+    Returns
+    -------
+    pd.DataFrame
+        columns: [date, sector_type, sector_name, fund_flow, change_pct,
+                 leading_stock, leading_stock_change]
+    """
+    router = _get_router()
+    cache = _get_cache()
+
+    target_date = target_date or date.today()
+    cache_key = f"sector_fund_flow:{target_date.isoformat()}:{sector_type}"
+
+    # 尝试读取缓存
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    # 先尝试从存储获取
+    stored = router.storage.get_sector_fund_flow(target_date, sector_type=sector_type)
+    if stored:
+        df = pd.DataFrame([s.model_dump() for s in stored])
+        cache.set(cache_key, df, ttl=300)
+        return df
+
+    # 从 fetcher 获取
+    fetcher = None
+    for f in router.fetcher_router.fetchers:
+        if hasattr(f, 'get_sector_fund_flow'):
+            fetcher = f
+            break
+
+    if fetcher is None:
+        logger.warning("No fetcher supports fund flow data")
+        return pd.DataFrame()
+
+    data = fetcher.get_sector_fund_flow(target_date, sector_type=sector_type)
+    if not data:
+        return pd.DataFrame()
+
+    # 保存到存储
+    router.storage.save_sector_fund_flow(data)
+
+    df = pd.DataFrame([d.model_dump() for d in data])
+    cache.set(cache_key, df, ttl=300)
+    return df
+
+
 __all__ = [
     "configure",
     "get_daily_bars",
     "get_stock_list",
+    "get_market_fund_flow",
+    "get_stock_fund_flow_rank",
+    "get_sector_fund_flow",
     "get_cache_stats",
     "clear_cache",
 ]

@@ -1,11 +1,14 @@
-from datetime import datetime
+from datetime import datetime, date
 from typing import List, Optional, Tuple
 import pandas as pd
 
 from trader_center.data_hub.storage.base import Storage
 from trader_center.data_hub.storage.sqlite_store import SQLiteStorage
 from trader_center.data_hub.storage.parquet_store import ParquetStorage
-from trader_center.data_hub.models import BarData, SymbolInfo
+from trader_center.data_hub.models import (
+    BarData, SymbolInfo,
+    MarketFundFlow, StockFundFlow, SectorFundFlow
+)
 from trader_center.data_hub.config import DataHubConfig
 
 
@@ -41,3 +44,32 @@ class HybridStorage(Storage):
     ) -> Tuple[Optional[datetime], Optional[datetime]]:
         """获取K线数据范围"""
         return self.parquet.get_data_range(symbol, frequency)
+
+    # 资金流向数据存储 - 转发到 SQLite
+    def save_market_fund_flow(self, data: MarketFundFlow) -> None:
+        """保存大盘资金流向数据"""
+        self.sqlite.save_market_fund_flow(data)
+
+    def get_market_fund_flow(self, target_date: date) -> Optional[MarketFundFlow]:
+        """获取大盘资金流向数据"""
+        return self.sqlite.get_market_fund_flow(target_date)
+
+    def save_stock_fund_flow(self, data: List[StockFundFlow]) -> None:
+        """保存个股资金流向数据"""
+        self.sqlite.save_stock_fund_flow(data)
+
+    def get_stock_fund_flow(
+        self, target_date: date, limit: int = 100
+    ) -> List[StockFundFlow]:
+        """获取个股资金流向数据"""
+        return self.sqlite.get_stock_fund_flow(target_date, limit)
+
+    def save_sector_fund_flow(self, data: List[SectorFundFlow]) -> None:
+        """保存板块资金流向数据"""
+        self.sqlite.save_sector_fund_flow(data)
+
+    def get_sector_fund_flow(
+        self, target_date: date, sector_type: Optional[str] = None
+    ) -> List[SectorFundFlow]:
+        """获取板块资金流向数据"""
+        return self.sqlite.get_sector_fund_flow(target_date, sector_type)
