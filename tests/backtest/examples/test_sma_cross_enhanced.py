@@ -98,3 +98,32 @@ def test_trend_confirmation():
     )
 
     assert result is not None
+
+
+def test_position_sizing():
+    """测试基于ATR的动态仓位管理"""
+    dates = pd.date_range('2024-01-01', periods=60, freq='B')
+    prices = [100 + i * 0.5 for i in range(60)]
+    df = pd.DataFrame({
+        'open': [p - 1 for p in prices],
+        'high': [p + 2 for p in prices],
+        'low': [p - 2 for p in prices],
+        'close': prices,
+        'volume': [10000] * 60,
+    }, index=dates)
+
+    engine = BacktestEngine(initial_cash=100000, commission=0.0003)
+    result = engine.run(
+        data=df,
+        strategy=SmaCrossEnhanced,
+        params=dict(
+            fast_period=5,
+            slow_period=20,
+            use_volatility_sizing=True,
+            atr_period=14,
+            risk_per_trade=0.02,
+            max_position_pct=0.5
+        )
+    )
+
+    assert result is not None

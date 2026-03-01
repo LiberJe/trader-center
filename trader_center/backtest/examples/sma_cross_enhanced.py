@@ -66,6 +66,10 @@ class SmaCrossEnhanced(bt.Strategy):
         if self.p.use_trend_confirm:
             self.trend_ma = bt.ind.SMA(period=self.p.trend_ma_period)
 
+        # ATR用于仓位管理和止损
+        if self.p.use_volatility_sizing or self.p.use_stop_loss:
+            self.atr = bt.ind.ATR(period=self.p.atr_period)
+
     def next(self):
         """每个bar执行一次."""
         pass
