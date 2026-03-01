@@ -49,7 +49,12 @@ class SmaCrossEnhanced(bt.Strategy):
 
     def __init__(self):
         """初始化指标."""
-        pass
+        # 基础均线
+        self.fast_ma = bt.ind.SMA(period=self.p.fast_period)
+        self.slow_ma = bt.ind.SMA(period=self.p.slow_period)
+
+        # 交叉信号
+        self.crossover = bt.ind.CrossOver(self.fast_ma, self.slow_ma)
 
     def next(self):
         """每个bar执行一次."""
