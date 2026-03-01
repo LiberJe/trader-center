@@ -1,1 +1,6 @@
-"""Backtest module with vectorized and event-driven engines."""
+"""Backtest module with backtrader-based event-driven engine."""
+
+from .engine import BacktestEngine
+from .result import BacktestResult
+
+__all__ = ['BacktestEngine', 'BacktestResult']
