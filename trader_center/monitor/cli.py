@@ -160,12 +160,11 @@ def export_result(result: dict, filepath: str, task_name: str):
     print(f"\n[OK] 报告已导出到: {filepath}")
 
 
-def clean_data(target_date: Optional[date], data_type: str, all_dates: bool = False) -> dict:
+def clean_data(target_date: Optional[date], all_dates: bool = False) -> dict:
     """清理资金流向数据
 
     Args:
         target_date: 目标日期（当 all_dates=True 时忽略）
-        data_type: 数据类型 - "all" | "market" | "stock" | "sector"
         all_dates: 是否清理所有日期的数据
 
     Returns:
@@ -178,41 +177,26 @@ def clean_data(target_date: Optional[date], data_type: str, all_dates: bool = Fa
 
     if all_dates:
         # 删除所有日期的数据
-        result = dh.delete_all_fund_flow_data(
-            data_type=data_type,
-            clear_cache=True,
-        )
+        result = dh.delete_all_fund_flow_data()
     else:
         # 删除指定日期的数据
-        result = dh.delete_fund_flow_data(
-            target_date=target_date,
-            data_type=data_type,
-            clear_cache=True,
-        )
+        result = dh.delete_fund_flow_data(target_date=target_date)
 
     return result
 
 
-def print_clean_result(result: dict, target_date: Optional[date], data_type: str, all_dates: bool = False):
+def print_clean_result(result: dict, target_date: Optional[date], all_dates: bool = False):
     """打印清理结果
 
     Args:
         result: 删除结果统计
         target_date: 目标日期
-        data_type: 数据类型
         all_dates: 是否清理了所有日期的数据
     """
-    type_names = {
-        "all": "所有",
-        "market": "大盘",
-        "stock": "个股",
-        "sector": "板块",
-    }
-
     if all_dates:
-        print(f"\n[INFO] 清理所有日期的{type_names.get(data_type, data_type)}资金流向数据")
+        print("\n[INFO] 清理所有日期的资金流向数据")
     else:
-        print(f"\n[INFO] 清理 {target_date} 的{type_names.get(data_type, data_type)}资金流向数据")
+        print(f"\n[INFO] 清理 {target_date} 的资金流向数据")
     print("[OK] 已删除:")
     print(f"     大盘资金流向: {result.get('market', 0)} 条")
     print(f"     个股资金流向: {result.get('stock', 0)} 条")
@@ -226,15 +210,13 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  %(prog)s --list                     # 列出所有可用任务
-  %(prog)s fund_flow                  # 执行资金流向任务
-  %(prog)s fund_flow -d 2025-08-26    # 执行指定日期
-  %(prog)s fund_flow -t 20            # 显示前20条
-  %(prog)s fund_flow -o report.txt    # 导出到文件
-  %(prog)s clean -d 2025-08-26        # 清理指定日期数据
-  %(prog)s clean -d 2025-08-26 -t market  # 只清理大盘数据
-  %(prog)s clean --all                # 清理所有日期数据
-  %(prog)s clean --all --type stock   # 清理所有日期的个股数据
+  %(prog)s --list                              # 列出所有可用任务
+  %(prog)s fund_flow                           # 执行资金流向任务
+  %(prog)s fund_flow -d 2025-08-26             # 执行指定日期
+  %(prog)s fund_flow -t 20                     # 显示前20条
+  %(prog)s fund_flow -o report.txt             # 导出到文件
+  %(prog)s clean --fund-flow -d 2025-08-26     # 清理指定日期资金流向数据
+  %(prog)s clean --fund-flow --all             # 清理所有日期资金流向数据
         """
     )
 
@@ -278,18 +260,16 @@ def main():
     )
 
     parser.add_argument(
-        '--type',
-        type=str,
-        default='all',
-        choices=['all', 'market', 'stock', 'sector'],
-        help='数据类型 (仅用于 clean 命令): all(默认), market, stock, sector'
+        '--fund-flow',
+        action='store_true',
+        help='清理资金流向数据（clean 命令必须指定此参数）'
     )
 
     parser.add_argument(
         '--all',
         action='store_true',
         dest='all_dates',
-        help='清理所有日期的数据（用于 clean 命令）'
+        help='清理所有日期的数据（与 --date 互斥）'
     )
 
     args = parser.parse_args()
@@ -315,19 +295,29 @@ def main():
 
     # 处理 clean 命令
     if args.task == 'clean':
-        # 检查参数：必须指定 --date 或 --all 之一
+        # 必须指定 --fund-flow
+        if not args.fund_flow:
+            print("[ERR] 错误: clean 命令必须指定 --fund-flow 参数", file=sys.stderr)
+            sys.exit(1)
+
+        # 必须指定 --date 或 --all 之一
         if not args.date and not args.all_dates:
             print("[ERR] 错误: 请指定 --date 或 --all 参数", file=sys.stderr)
+            sys.exit(1)
+
+        # 不能同时指定 --date 和 --all
+        if args.date and args.all_dates:
+            print("[ERR] 错误: --date 和 --all 不能同时使用", file=sys.stderr)
             sys.exit(1)
 
         if args.all_dates:
             # 清理所有日期
             if args.verbose:
-                print(f"[INFO] 清理所有日期的数据，类型: {args.type}")
+                print("[INFO] 清理所有日期的资金流向数据")
 
             try:
-                result = clean_data(None, args.type, all_dates=True)
-                print_clean_result(result, None, args.type, all_dates=True)
+                result = clean_data(None, all_dates=True)
+                print_clean_result(result, None, all_dates=True)
             except Exception as e:
                 print(f"[ERR] 清理数据异常: {e}", file=sys.stderr)
                 sys.exit(1)
@@ -340,11 +330,11 @@ def main():
                 sys.exit(1)
 
             if args.verbose:
-                print(f"[INFO] 清理数据: {target_date}, 类型: {args.type}")
+                print(f"[INFO] 清理资金流向数据: {target_date}")
 
             try:
-                result = clean_data(target_date, args.type, all_dates=False)
-                print_clean_result(result, target_date, args.type, all_dates=False)
+                result = clean_data(target_date, all_dates=False)
+                print_clean_result(result, target_date, all_dates=False)
             except Exception as e:
                 print(f"[ERR] 清理数据异常: {e}", file=sys.stderr)
                 sys.exit(1)

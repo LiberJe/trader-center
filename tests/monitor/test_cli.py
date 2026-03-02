@@ -164,23 +164,12 @@ def test_clean_all_dates(mock_delete_all):
     # 模拟返回删除统计
     mock_delete_all.return_value = {"market": 5, "stock": 500, "sector": 100}
 
-    result = cli.clean_data(None, "all", all_dates=True)
+    result = cli.clean_data(None, all_dates=True)
 
     assert result["market"] == 5
     assert result["stock"] == 500
     assert result["sector"] == 100
-    mock_delete_all.assert_called_once_with(data_type="all", clear_cache=True)
-
-
-@patch('trader_center.data_hub.delete_all_fund_flow_data')
-def test_clean_all_dates_with_type(mock_delete_all):
-    """测试清理所有日期的特定类型数据"""
-    mock_delete_all.return_value = {"market": 0, "stock": 500, "sector": 0}
-
-    result = cli.clean_data(None, "stock", all_dates=True)
-
-    assert result["stock"] == 500
-    mock_delete_all.assert_called_once_with(data_type="stock", clear_cache=True)
+    mock_delete_all.assert_called_once_with()
 
 
 @patch('trader_center.monitor.task_router.get_task_router')
@@ -193,19 +182,68 @@ def test_main_clean_all(mock_delete_all, mock_get_router):
     mock_get_router.return_value = mock_router
 
     with pytest.raises(SystemExit) as exc:
-        with patch('sys.argv', ['monitor', 'clean', '--all']):
+        with patch('sys.argv', ['monitor', 'clean', '--fund-flow', '--all']):
             cli.main()
     assert exc.value.code == 0
-    mock_delete_all.assert_called_once_with(data_type="all", clear_cache=True)
+    mock_delete_all.assert_called_once_with()
 
 
 @patch('trader_center.monitor.task_router.get_task_router')
-def test_main_clean_missing_args(mock_get_router, capsys):
-    """测试 clean 命令缺少参数时出错"""
+def test_main_clean_missing_fund_flow_flag(mock_get_router, capsys):
+    """测试 clean 命令缺少 --fund-flow 参数时出错"""
     mock_router = MagicMock()
     mock_get_router.return_value = mock_router
 
     with pytest.raises(SystemExit) as exc:
-        with patch('sys.argv', ['monitor', 'clean']):
+        with patch('sys.argv', ['monitor', 'clean', '-d', '2025-08-26']):
             cli.main()
     assert exc.value.code == 1
+
+    captured = capsys.readouterr()
+    assert '--fund-flow' in captured.err
+
+
+@patch('trader_center.monitor.task_router.get_task_router')
+def test_main_clean_missing_date_or_all(mock_get_router, capsys):
+    """测试 clean 命令缺少 --date 或 --all 参数时出错"""
+    mock_router = MagicMock()
+    mock_get_router.return_value = mock_router
+
+    with pytest.raises(SystemExit) as exc:
+        with patch('sys.argv', ['monitor', 'clean', '--fund-flow']):
+            cli.main()
+    assert exc.value.code == 1
+
+    captured = capsys.readouterr()
+    assert '--date' in captured.err or '--all' in captured.err
+
+
+@patch('trader_center.monitor.task_router.get_task_router')
+def test_main_clean_date_and_all_conflict(mock_get_router, capsys):
+    """测试 clean 命令同时指定 --date 和 --all 时出错"""
+    mock_router = MagicMock()
+    mock_get_router.return_value = mock_router
+
+    with pytest.raises(SystemExit) as exc:
+        with patch('sys.argv', ['monitor', 'clean', '--fund-flow', '-d', '2025-08-26', '--all']):
+            cli.main()
+    assert exc.value.code == 1
+
+    captured = capsys.readouterr()
+    assert '不能同时使用' in captured.err or '互斥' in captured.err
+
+
+@patch('trader_center.monitor.task_router.get_task_router')
+@patch('trader_center.data_hub.delete_fund_flow_data')
+def test_main_clean_specific_date(mock_delete, mock_get_router):
+    """测试 CLI 清理指定日期数据"""
+    mock_delete.return_value = {"market": 1, "stock": 100, "sector": 20}
+
+    mock_router = MagicMock()
+    mock_get_router.return_value = mock_router
+
+    with pytest.raises(SystemExit) as exc:
+        with patch('sys.argv', ['monitor', 'clean', '--fund-flow', '-d', '2025-08-26']):
+            cli.main()
+    assert exc.value.code == 0
+    mock_delete.assert_called_once()
