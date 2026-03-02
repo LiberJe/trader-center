@@ -160,6 +160,65 @@ def export_result(result: dict, filepath: str, task_name: str):
     print(f"\n[OK] 报告已导出到: {filepath}")
 
 
+def clean_data(target_date: Optional[date], data_type: str, all_dates: bool = False) -> dict:
+    """清理资金流向数据
+
+    Args:
+        target_date: 目标日期（当 all_dates=True 时忽略）
+        data_type: 数据类型 - "all" | "market" | "stock" | "sector"
+        all_dates: 是否清理所有日期的数据
+
+    Returns:
+        删除结果统计字典
+    """
+    import trader_center.data_hub as dh
+
+    # 清理内存缓存
+    dh.clear_cache()
+
+    if all_dates:
+        # 删除所有日期的数据
+        result = dh.delete_all_fund_flow_data(
+            data_type=data_type,
+            clear_cache=True,
+        )
+    else:
+        # 删除指定日期的数据
+        result = dh.delete_fund_flow_data(
+            target_date=target_date,
+            data_type=data_type,
+            clear_cache=True,
+        )
+
+    return result
+
+
+def print_clean_result(result: dict, target_date: Optional[date], data_type: str, all_dates: bool = False):
+    """打印清理结果
+
+    Args:
+        result: 删除结果统计
+        target_date: 目标日期
+        data_type: 数据类型
+        all_dates: 是否清理了所有日期的数据
+    """
+    type_names = {
+        "all": "所有",
+        "market": "大盘",
+        "stock": "个股",
+        "sector": "板块",
+    }
+
+    if all_dates:
+        print(f"\n[INFO] 清理所有日期的{type_names.get(data_type, data_type)}资金流向数据")
+    else:
+        print(f"\n[INFO] 清理 {target_date} 的{type_names.get(data_type, data_type)}资金流向数据")
+    print("[OK] 已删除:")
+    print(f"     大盘资金流向: {result.get('market', 0)} 条")
+    print(f"     个股资金流向: {result.get('stock', 0)} 条")
+    print(f"     板块资金流向: {result.get('sector', 0)} 条")
+
+
 def main():
     """主入口函数"""
     parser = argparse.ArgumentParser(
@@ -172,6 +231,10 @@ def main():
   %(prog)s fund_flow -d 2025-08-26    # 执行指定日期
   %(prog)s fund_flow -t 20            # 显示前20条
   %(prog)s fund_flow -o report.txt    # 导出到文件
+  %(prog)s clean -d 2025-08-26        # 清理指定日期数据
+  %(prog)s clean -d 2025-08-26 -t market  # 只清理大盘数据
+  %(prog)s clean --all                # 清理所有日期数据
+  %(prog)s clean --all --type stock   # 清理所有日期的个股数据
         """
     )
 
@@ -214,6 +277,21 @@ def main():
         help='显示详细输出'
     )
 
+    parser.add_argument(
+        '--type',
+        type=str,
+        default='all',
+        choices=['all', 'market', 'stock', 'sector'],
+        help='数据类型 (仅用于 clean 命令): all(默认), market, stock, sector'
+    )
+
+    parser.add_argument(
+        '--all',
+        action='store_true',
+        dest='all_dates',
+        help='清理所有日期的数据（用于 clean 命令）'
+    )
+
     args = parser.parse_args()
 
     # 导入路由器
@@ -234,6 +312,44 @@ def main():
         print("[ERR] 请指定任务名称或使用 --list 查看可用任务", file=sys.stderr)
         parser.print_help()
         sys.exit(1)
+
+    # 处理 clean 命令
+    if args.task == 'clean':
+        # 检查参数：必须指定 --date 或 --all 之一
+        if not args.date and not args.all_dates:
+            print("[ERR] 错误: 请指定 --date 或 --all 参数", file=sys.stderr)
+            sys.exit(1)
+
+        if args.all_dates:
+            # 清理所有日期
+            if args.verbose:
+                print(f"[INFO] 清理所有日期的数据，类型: {args.type}")
+
+            try:
+                result = clean_data(None, args.type, all_dates=True)
+                print_clean_result(result, None, args.type, all_dates=True)
+            except Exception as e:
+                print(f"[ERR] 清理数据异常: {e}", file=sys.stderr)
+                sys.exit(1)
+        else:
+            # 清理指定日期
+            try:
+                target_date = parse_date(args.date)
+            except DateParseError as e:
+                print(f"[ERR] 错误: {e}", file=sys.stderr)
+                sys.exit(1)
+
+            if args.verbose:
+                print(f"[INFO] 清理数据: {target_date}, 类型: {args.type}")
+
+            try:
+                result = clean_data(target_date, args.type, all_dates=False)
+                print_clean_result(result, target_date, args.type, all_dates=False)
+            except Exception as e:
+                print(f"[ERR] 清理数据异常: {e}", file=sys.stderr)
+                sys.exit(1)
+
+        sys.exit(0)
 
     # 检查任务是否存在
     task_info = router.get_task_info(args.task)

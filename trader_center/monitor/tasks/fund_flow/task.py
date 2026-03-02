@@ -141,7 +141,8 @@ class FundFlowTask(BaseTask):
         """获取大盘资金流向（带重试）"""
         for attempt in range(max_retries):
             try:
-                return dh.get_market_fund_flow(target_date)
+                result = dh.get_market_fund_flow(target_date)
+                return result if result is not None else pd.DataFrame()
             except Exception as e:
                 self.logger.warning(f"获取大盘资金流向失败（尝试 {attempt + 1}/{max_retries}）: {e}")
                 if attempt < max_retries - 1:
@@ -157,7 +158,8 @@ class FundFlowTask(BaseTask):
         """获取个股资金流向（带重试）"""
         for attempt in range(max_retries):
             try:
-                return dh.get_stock_fund_flow_rank(target_date, top_n=top_n)
+                result = dh.get_stock_fund_flow_rank(target_date, top_n=top_n)
+                return result if result is not None else pd.DataFrame()
             except Exception as e:
                 self.logger.warning(f"获取个股资金流向失败（尝试 {attempt + 1}/{max_retries}）: {e}")
                 if attempt < max_retries - 1:
@@ -173,7 +175,8 @@ class FundFlowTask(BaseTask):
         """获取板块资金流向（带重试）"""
         for attempt in range(max_retries):
             try:
-                return dh.get_sector_fund_flow(target_date, sector_type=sector_type)
+                result = dh.get_sector_fund_flow(target_date, sector_type=sector_type)
+                return result if result is not None else pd.DataFrame()
             except Exception as e:
                 self.logger.warning(
                     f"获取{sector_type}板块资金流向失败（尝试 {attempt + 1}/{max_retries}）: {e}"

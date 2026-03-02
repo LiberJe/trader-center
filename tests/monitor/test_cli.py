@@ -156,3 +156,56 @@ def test_main_error_status(mock_get_router):
         with patch('sys.argv', ['monitor', 'fund_flow']):
             cli.main()
     assert exc.value.code == 1
+
+
+@patch('trader_center.data_hub.delete_all_fund_flow_data')
+def test_clean_all_dates(mock_delete_all):
+    """测试清理所有日期数据"""
+    # 模拟返回删除统计
+    mock_delete_all.return_value = {"market": 5, "stock": 500, "sector": 100}
+
+    result = cli.clean_data(None, "all", all_dates=True)
+
+    assert result["market"] == 5
+    assert result["stock"] == 500
+    assert result["sector"] == 100
+    mock_delete_all.assert_called_once_with(data_type="all", clear_cache=True)
+
+
+@patch('trader_center.data_hub.delete_all_fund_flow_data')
+def test_clean_all_dates_with_type(mock_delete_all):
+    """测试清理所有日期的特定类型数据"""
+    mock_delete_all.return_value = {"market": 0, "stock": 500, "sector": 0}
+
+    result = cli.clean_data(None, "stock", all_dates=True)
+
+    assert result["stock"] == 500
+    mock_delete_all.assert_called_once_with(data_type="stock", clear_cache=True)
+
+
+@patch('trader_center.monitor.task_router.get_task_router')
+@patch('trader_center.data_hub.delete_all_fund_flow_data')
+def test_main_clean_all(mock_delete_all, mock_get_router):
+    """测试 CLI 清理所有日期数据"""
+    mock_delete_all.return_value = {"market": 5, "stock": 500, "sector": 100}
+
+    mock_router = MagicMock()
+    mock_get_router.return_value = mock_router
+
+    with pytest.raises(SystemExit) as exc:
+        with patch('sys.argv', ['monitor', 'clean', '--all']):
+            cli.main()
+    assert exc.value.code == 0
+    mock_delete_all.assert_called_once_with(data_type="all", clear_cache=True)
+
+
+@patch('trader_center.monitor.task_router.get_task_router')
+def test_main_clean_missing_args(mock_get_router, capsys):
+    """测试 clean 命令缺少参数时出错"""
+    mock_router = MagicMock()
+    mock_get_router.return_value = mock_router
+
+    with pytest.raises(SystemExit) as exc:
+        with patch('sys.argv', ['monitor', 'clean']):
+            cli.main()
+    assert exc.value.code == 1

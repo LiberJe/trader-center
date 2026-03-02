@@ -342,3 +342,82 @@ class SQLiteStorage(Storage):
                 )
                 for row in rows
             ]
+
+    def delete_market_fund_flow(self, target_date: date) -> int:
+        """删除指定日期的大盘资金流向数据
+
+        Returns:
+            删除的记录数
+        """
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM market_fund_flow WHERE date = ?",
+                (target_date.isoformat(),),
+            )
+            return cursor.rowcount
+
+    def delete_stock_fund_flow(self, target_date: date) -> int:
+        """删除指定日期的个股资金流向数据
+
+        Returns:
+            删除的记录数
+        """
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM stock_fund_flow WHERE date = ?",
+                (target_date.isoformat(),),
+            )
+            return cursor.rowcount
+
+    def delete_sector_fund_flow(self, target_date: date, sector_type: Optional[str] = None) -> int:
+        """删除指定日期的板块资金流向数据
+
+        Args:
+            target_date: 目标日期
+            sector_type: 板块类型，为 None 时删除所有类型
+
+        Returns:
+            删除的记录数
+        """
+        with self._connect() as conn:
+            if sector_type:
+                cursor = conn.execute(
+                    "DELETE FROM sector_fund_flow WHERE date = ? AND sector_type = ?",
+                    (target_date.isoformat(), sector_type),
+                )
+            else:
+                cursor = conn.execute(
+                    "DELETE FROM sector_fund_flow WHERE date = ?",
+                    (target_date.isoformat(),),
+                )
+            return cursor.rowcount
+
+    def delete_all_market_fund_flow(self) -> int:
+        """删除所有日期的大盘资金流向数据
+
+        Returns:
+            删除的记录数
+        """
+        with self._connect() as conn:
+            cursor = conn.execute("DELETE FROM market_fund_flow")
+            return cursor.rowcount
+
+    def delete_all_stock_fund_flow(self) -> int:
+        """删除所有日期的个股资金流向数据
+
+        Returns:
+            删除的记录数
+        """
+        with self._connect() as conn:
+            cursor = conn.execute("DELETE FROM stock_fund_flow")
+            return cursor.rowcount
+
+    def delete_all_sector_fund_flow(self) -> int:
+        """删除所有日期的板块资金流向数据
+
+        Returns:
+            删除的记录数
+        """
+        with self._connect() as conn:
+            cursor = conn.execute("DELETE FROM sector_fund_flow")
+            return cursor.rowcount

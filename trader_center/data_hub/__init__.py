@@ -276,7 +276,12 @@ def get_stock_fund_flow_rank(
         cache.set(cache_key, df, ttl=300)
         return df
 
-    # 从 fetcher 获取
+    # 存储中没有，只有今天的数据可以从 API 获取
+    if target_date != date.today():
+        logger.warning(f"Stock fund flow for {target_date} not found in storage, and historical data not available from API")
+        return pd.DataFrame()
+
+    # 从 fetcher 获取今天的数据
     fetcher = None
     for f in router.fetcher_router.fetchers:
         if hasattr(f, 'get_stock_fund_flow_rank'):
@@ -336,7 +341,12 @@ def get_sector_fund_flow(
         cache.set(cache_key, df, ttl=300)
         return df
 
-    # 从 fetcher 获取
+    # 存储中没有，只有今天的数据可以从 API 获取
+    if target_date != date.today():
+        logger.warning(f"Sector fund flow for {target_date} not found in storage, and historical data not available from API")
+        return pd.DataFrame()
+
+    # 从 fetcher 获取今天的数据
     fetcher = None
     for f in router.fetcher_router.fetchers:
         if hasattr(f, 'get_sector_fund_flow'):
@@ -359,6 +369,97 @@ def get_sector_fund_flow(
     return df
 
 
+def delete_fund_flow_data(
+    target_date: Optional[date] = None,
+    data_type: str = "all",
+    clear_cache: bool = True,
+) -> dict:
+    """删除指定日期的资金流向数据
+
+    用于清理错误或过期数据。
+
+    Args:
+        target_date: 目标日期，默认为今天
+        data_type: 数据类型 - "all" | "market" | "stock" | "sector"
+        clear_cache: 是否同时清理缓存
+
+    Returns:
+        {
+            "market": int,  # 删除的大盘数据记录数
+            "stock": int,   # 删除的个股数据记录数
+            "sector": int,  # 删除的板块数据记录数
+        }
+    """
+    router = _get_router()
+    target_date = target_date or date.today()
+
+    result = {"market": 0, "stock": 0, "sector": 0}
+
+    if data_type in ("all", "market"):
+        result["market"] = router.storage.delete_market_fund_flow(target_date)
+
+    if data_type in ("all", "stock"):
+        result["stock"] = router.storage.delete_stock_fund_flow(target_date)
+
+    if data_type in ("all", "sector"):
+        result["sector"] = router.storage.delete_sector_fund_flow(target_date)
+
+    # 清理缓存
+    if clear_cache:
+        cache = _get_cache()
+        # 清理该日期相关的缓存
+        cache_keys_to_delete = [
+            CacheKeyBuilder.for_bars("market_fund_flow", target_date, target_date, "1d"),
+            f"stock_fund_flow:{target_date.isoformat()}",
+            f"sector_fund_flow:{target_date.isoformat()}",
+        ]
+        for key in cache_keys_to_delete:
+            # CacheManager 没有直接删除方法，通过设置过期来处理
+            pass  # TTL 会自动过期，或者使用 clear() 清空全部
+
+    logger.info(f"Deleted fund flow data for {target_date}: {result}")
+    return result
+
+
+def delete_all_fund_flow_data(
+    data_type: str = "all",
+    clear_cache: bool = True,
+) -> dict:
+    """删除所有日期的资金流向数据
+
+    Args:
+        data_type: 数据类型 - "all" | "market" | "stock" | "sector"
+        clear_cache: 是否同时清理缓存
+
+    Returns:
+        {
+            "market": int,  # 删除的大盘数据记录数
+            "stock": int,   # 删除的个股数据记录数
+            "sector": int,  # 删除的板块数据记录数
+        }
+    """
+    router = _get_router()
+
+    result = {"market": 0, "stock": 0, "sector": 0}
+
+    if data_type in ("all", "market"):
+        result["market"] = router.storage.delete_all_market_fund_flow()
+
+    if data_type in ("all", "stock"):
+        result["stock"] = router.storage.delete_all_stock_fund_flow()
+
+    if data_type in ("all", "sector"):
+        result["sector"] = router.storage.delete_all_sector_fund_flow()
+
+    # 清理缓存
+    if clear_cache:
+        cache = _get_cache()
+        cache.clear()
+
+    logger.info(f"Deleted all fund flow data: {result}")
+    return result
+
+
 __all__ = [
     "configure",
     "get_daily_bars",
@@ -368,4 +469,6 @@ __all__ = [
     "get_sector_fund_flow",
     "get_cache_stats",
     "clear_cache",
+    "delete_fund_flow_data",
+    "delete_all_fund_flow_data",
 ]

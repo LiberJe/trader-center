@@ -73,3 +73,27 @@ class HybridStorage(Storage):
     ) -> List[SectorFundFlow]:
         """获取板块资金流向数据"""
         return self.sqlite.get_sector_fund_flow(target_date, sector_type)
+
+    def delete_market_fund_flow(self, target_date: date) -> int:
+        """删除指定日期的大盘资金流向数据"""
+        return self.sqlite.delete_market_fund_flow(target_date)
+
+    def delete_stock_fund_flow(self, target_date: date) -> int:
+        """删除指定日期的个股资金流向数据"""
+        return self.sqlite.delete_stock_fund_flow(target_date)
+
+    def delete_sector_fund_flow(self, target_date: date, sector_type: Optional[str] = None) -> int:
+        """删除指定日期的板块资金流向数据"""
+        return self.sqlite.delete_sector_fund_flow(target_date, sector_type)
+
+    def delete_all_market_fund_flow(self) -> int:
+        """删除所有日期的大盘资金流向数据"""
+        return self.sqlite.delete_all_market_fund_flow()
+
+    def delete_all_stock_fund_flow(self) -> int:
+        """删除所有日期的个股资金流向数据"""
+        return self.sqlite.delete_all_stock_fund_flow()
+
+    def delete_all_sector_fund_flow(self) -> int:
+        """删除所有日期的板块资金流向数据"""
+        return self.sqlite.delete_all_sector_fund_flow()

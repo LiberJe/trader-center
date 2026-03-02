@@ -18,7 +18,7 @@ def format_fund_flow(value: float) -> str:
 def format_market_fund_flow(df: pd.DataFrame) -> str:
     """格式化大盘资金流向输出"""
     if df.empty:
-        return "  [!] 无数据"
+        return "  [!] 该日期暂无数据"
 
     lines = []
     row = df.iloc[0]
@@ -40,7 +40,7 @@ def format_market_fund_flow(df: pd.DataFrame) -> str:
 def format_stock_ranking(df: pd.DataFrame, top_n: int = 10) -> str:
     """格式化个股资金流向排名"""
     if df.empty:
-        return "  [!] 无数据"
+        return "  [!] 该日期暂无数据"
 
     sorted_df = df.sort_values('fund_flow', ascending=False)
 
@@ -61,7 +61,7 @@ def format_stock_ranking(df: pd.DataFrame, top_n: int = 10) -> str:
 def format_sector_fund_flow(df: pd.DataFrame, top_n: int = 10, title: str = "板块") -> str:
     """格式化板块资金流向"""
     if df.empty:
-        return f"  [WARN]  无{title}数据"
+        return f"  [WARN]  该日期暂无{title}数据"
 
     sorted_df = df.sort_values('fund_flow', ascending=False)
 

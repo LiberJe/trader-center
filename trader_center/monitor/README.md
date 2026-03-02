@@ -42,6 +42,35 @@ python -m trader_center.monitor fund_flow -t 20
 python -m trader_center.monitor fund_flow -o report.txt
 ```
 
+### 清理资金流向数据
+
+```bash
+# 清理指定日期的所有资金流向数据
+python -m trader_center.monitor clean -d 2025-08-26
+
+# 只清理大盘资金流向数据
+python -m trader_center.monitor clean -d 2025-08-26 --type market
+
+# 只清理个股资金流向数据
+python -m trader_center.monitor clean -d 2025-08-26 --type stock
+
+# 只清理板块资金流向数据
+python -m trader_center.monitor clean -d 2025-08-26 --type sector
+
+# 清理所有日期的所有资金流向数据
+python -m trader_center.monitor clean --all
+
+# 清理所有日期的个股资金流向数据
+python -m trader_center.monitor clean --all --type stock
+```
+
+**说明：**
+- `clean` 命令用于删除本地存储的资金流向数据
+- 清理后会自动清除相关内存缓存
+- 使用 `-d` 指定日期，或使用 `--all` 清理所有日期
+- 数据类型选项：`all` (默认), `market`, `stock`, `sector`
+- `--all` 和 `-d` 参数必须且只能指定一个
+
 ## 命令行参数
 
 | 参数 | 简写 | 说明 | 示例 |
@@ -51,6 +80,8 @@ python -m trader_center.monitor fund_flow -o report.txt
 | `--top` | `-t` | 显示前 N 条记录 (默认: 10) | `-t 20` |
 | `--output` | `-o` | 导出结果到文件 | `-o report.txt` |
 | `--verbose` | `-v` | 显示详细输出 | `-v` |
+| `--type` | | 数据类型 (仅用于 clean 命令) | `--type market` |
+| `--all` | | 清理所有日期的数据 (仅用于 clean) | `--all` |
 
 ## 内置任务
 
@@ -261,6 +292,9 @@ A: 在任务类中重写 `format_output()` 方法，或使用独立的 formatter
 
 **Q: 任务执行失败如何排查？**
 A: 使用 `-v` 参数查看详细日志，检查网络连接和数据源可用性。
+
+**Q: 如何清理错误或过期的资金流向数据？**
+A: 使用 `clean` 命令清理本地存储的数据。可以指定日期 `-d 2025-08-26` 清理该日期的数据，或使用 `--all` 清理所有日期的数据。使用 `--type` 参数可指定清理特定类型的数据（market/stock/sector）。
 
 ## 许可证
 
