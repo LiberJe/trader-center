@@ -98,7 +98,7 @@ class BacktestRunner:
             # 加载数据
             for symbol in symbols:
                 data = self._load_data(symbol, start, end)
-                if data:
+                if data is not None:
                     cerebro.adddata(data)
 
             if not cerebro.datas:
@@ -114,10 +114,14 @@ class BacktestRunner:
             # 配置 Broker
             configure_astock_broker(cerebro, cash=initial_cash)
 
-            # 添加分析器
-            cerebro.addanalyzer(bt.analyzers.Returns, _name='returns')
-            cerebro.addanalyzer(bt.analyzers.DrawDown, _name='drawdown')
-            cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name='trades')
+            # 添加分析器（如果可用）
+            try:
+                cerebro.addanalyzer(bt.analyzers.Returns, _name='returns')
+                cerebro.addanalyzer(bt.analyzers.DrawDown, _name='drawdown')
+                cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name='trades')
+            except (AttributeError, TypeError):
+                # 分析器可能不可用，继续运行
+                self.logger.warning("Analyzers not available, skipping")
 
             # 运行回测
             self.logger.info(f"Running backtest for {strategy_name}")
@@ -142,7 +146,9 @@ class BacktestRunner:
             )
 
         except Exception as e:
+            import traceback
             self.logger.error(f"Backtest failed: {e}")
+            self.logger.error(traceback.format_exc())
             return BacktestResult(
                 strategy_name=strategy_name,
                 initial_cash=initial_cash,

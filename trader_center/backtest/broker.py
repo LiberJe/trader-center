@@ -13,7 +13,6 @@ from dataclasses import dataclass
 from typing import Optional
 
 
-@dataclass
 class AStockCommissionScheme(bt.CommInfoBase):
     """
     A股手续费计算方案
@@ -25,35 +24,36 @@ class AStockCommissionScheme(bt.CommInfoBase):
     """
 
     params = (
-        ('commission', 0.00025),   # 万2.5
-        ('stamp_duty', 0.001),      # 千1印花税
+        ('commission', 0.025),   # 万2.5 = 0.025% (backtrader uses percentage value)
+        ('stamp_duty', 0.1),      # 千1 = 0.1% 印花税 (only on sell)
         ('min_commission', 5.0),    # 最低5元
         ('stocklike', True),
         ('commtype', bt.CommInfoBase.COMM_PERC),
     )
 
-    def getcommission(self, size: float, price: float, is_buy: bool) -> float:
+    def getcommission(self, size: float, price: float, pseudoexec: bool = False) -> float:
         """
         计算手续费
 
         Args:
-            size: 成交数量
+            size: 成交数量（正数=买入，负数=卖出）
             price: 成交价格
-            is_buy: 是否买入
+            pseudoexec: 是否预执行（backtrader内部使用）
 
         Returns:
             总费用（元）
         """
         amount = abs(size) * price
+        is_buy = size > 0
 
-        # 佣金（买卖都收）
+        # 佣金（买卖都收）- commission is already in decimal (0.00025)
         commission = amount * self.p.commission
         commission = max(commission, self.p.min_commission)
 
-        # 印花税（仅卖出）
+        # 印花税（仅卖出）- stamp_duty is in percentage (0.1%), convert to decimal
         stamp_duty = 0
         if not is_buy:
-            stamp_duty = amount * self.p.stamp_duty
+            stamp_duty = amount * (self.p.stamp_duty / 100)
 
         return commission + stamp_duty
 
