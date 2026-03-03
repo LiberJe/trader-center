@@ -2,6 +2,7 @@ pydantic>=2.0
 pandas>=2.0
 akshare>=1.15
 pyarrow>=15.0
+backtrader>=1.9.78
 
 [dev]
 pytest>=8.0

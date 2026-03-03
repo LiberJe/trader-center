@@ -7,6 +7,7 @@ dependencies = [
     "pandas>=2.0",
     "akshare>=1.15",
     "pyarrow>=15.0",
+    "backtrader>=1.9.78",
 ]
 
 [project.optional-dependencies]
