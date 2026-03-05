@@ -273,11 +273,20 @@ class AkshareFetcher(DataFetcher):
                 df[date_col] = pd.to_datetime(df[date_col]).dt.date
                 actual_date = df[date_col].iloc[0]
                 if actual_date != target_date:
-                    self.logger.warning(
-                        f"Stock fund flow data date {actual_date} does not match target {target_date}"
-                    )
-                    return []
-                data_date = actual_date
+                    # 如果目标日期是今天或未来日期，接受最近交易日的数据
+                    if target_date >= dt_date.today():
+                        self.logger.info(
+                            f"Using latest available stock fund flow data from {actual_date} "
+                            f"(target was {target_date})"
+                        )
+                        data_date = actual_date
+                    else:
+                        self.logger.warning(
+                            f"Stock fund flow data date {actual_date} does not match target {target_date}"
+                        )
+                        return []
+                else:
+                    data_date = actual_date
             else:
                 # 无日期列，需要通过大盘数据推断实际日期
                 try:
@@ -288,12 +297,21 @@ class AkshareFetcher(DataFetcher):
                         actual_date = market_df[market_date_col].iloc[0]
 
                         if actual_date != target_date:
-                            self.logger.warning(
-                                f"Stock fund flow actual date {actual_date} does not match target {target_date}, "
-                                f"API may not have updated for today yet"
-                            )
-                            return []
-                        data_date = actual_date
+                            # 如果目标日期是今天或未来日期，接受最近交易日的数据
+                            if target_date >= dt_date.today():
+                                self.logger.info(
+                                    f"Using latest available stock fund flow data from {actual_date} "
+                                    f"(target was {target_date})"
+                                )
+                                data_date = actual_date
+                            else:
+                                self.logger.warning(
+                                    f"Stock fund flow actual date {actual_date} does not match target {target_date}, "
+                                    f"API may not have updated for today yet"
+                                )
+                                return []
+                        else:
+                            data_date = actual_date
                     else:
                         # 无法获取大盘数据，假设是今天
                         data_date = target_date
@@ -381,11 +399,20 @@ class AkshareFetcher(DataFetcher):
                 df[date_col] = pd.to_datetime(df[date_col]).dt.date
                 actual_date = df[date_col].iloc[0]
                 if actual_date != target_date:
-                    self.logger.warning(
-                        f"Sector fund flow data date {actual_date} does not match target {target_date}"
-                    )
-                    return []
-                data_date = actual_date
+                    # 如果目标日期是今天或未来日期，接受最近交易日的数据
+                    if target_date >= dt_date.today():
+                        self.logger.info(
+                            f"Using latest available sector fund flow data from {actual_date} "
+                            f"(target was {target_date})"
+                        )
+                        data_date = actual_date
+                    else:
+                        self.logger.warning(
+                            f"Sector fund flow data date {actual_date} does not match target {target_date}"
+                        )
+                        return []
+                else:
+                    data_date = actual_date
             else:
                 # 无日期列，需要通过大盘数据推断实际日期
                 try:
@@ -396,12 +423,21 @@ class AkshareFetcher(DataFetcher):
                         actual_date = market_df[market_date_col].iloc[0]
 
                         if actual_date != target_date:
-                            self.logger.warning(
-                                f"Sector fund flow actual date {actual_date} does not match target {target_date}, "
-                                f"API may not have updated for today yet"
-                            )
-                            return []
-                        data_date = actual_date
+                            # 如果目标日期是今天或未来日期，接受最近交易日的数据
+                            if target_date >= dt_date.today():
+                                self.logger.info(
+                                    f"Using latest available sector fund flow data from {actual_date} "
+                                    f"(target was {target_date})"
+                                )
+                                data_date = actual_date
+                            else:
+                                self.logger.warning(
+                                    f"Sector fund flow actual date {actual_date} does not match target {target_date}, "
+                                    f"API may not have updated for today yet"
+                                )
+                                return []
+                        else:
+                            data_date = actual_date
                     else:
                         # 无法获取大盘数据，假设是今天
                         data_date = target_date
