@@ -75,6 +75,48 @@ def create_parser() -> argparse.ArgumentParser:
         help='详细输出'
     )
 
+    parser.add_argument(
+        '--plot', '-p',
+        action='store_true',
+        help='显示可视化图表'
+    )
+
+    parser.add_argument(
+        '--plot-style',
+        choices=['candle', 'line', 'bar'],
+        default='candle',
+        help='图表样式（默认candle）'
+    )
+
+    parser.add_argument(
+        '--plot-file',
+        help='保存图表到文件（支持 .png, .pdf, .svg）'
+    )
+
+    parser.add_argument(
+        '--log-dir',
+        help='交易日志输出目录'
+    )
+
+    parser.add_argument(
+        '--no-auto-save',
+        action='store_true',
+        help='禁用自动保存交易日志'
+    )
+
+    parser.add_argument(
+        '--log-format',
+        choices=['csv', 'json'],
+        default='csv',
+        help='交易日志格式（默认csv）'
+    )
+
+    parser.add_argument(
+        '--no-auto-save-plot',
+        action='store_true',
+        help='禁用自动保存图表（启用可视化时）'
+    )
+
     return parser
 
 
@@ -91,7 +133,6 @@ def main(args: Optional[list] = None) -> int:
     if parsed.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    # 参数验证
     if not parsed.strategy:
         logger.error("请指定策略 --strategy")
         return 1
@@ -100,10 +141,8 @@ def main(args: Optional[list] = None) -> int:
         logger.error("请指定至少一个股票代码 --symbol")
         return 1
 
-    # 默认日期
     end_date = parsed.end or date.today().isoformat()
     if not parsed.start:
-        # 默认回测1年
         end = date.fromisoformat(end_date)
         start = end - timedelta(days=365)
         start_date = start.isoformat()
@@ -111,14 +150,27 @@ def main(args: Optional[list] = None) -> int:
         start_date = parsed.start
 
     try:
-        # 动态导入策略
         strategy = load_strategy(parsed.strategy)
         if strategy is None:
             logger.error(f"无法加载策略: {parsed.strategy}")
             return 1
 
-        # 执行回测
-        runner = BacktestRunner(max_workers=parsed.workers)
+        config = BacktestConfig(
+            max_workers=parsed.workers,
+            auto_save_trades=not parsed.no_auto_save,
+            trade_log_format=parsed.log_format,
+            auto_save_plot=not parsed.no_auto_save_plot,
+        )
+        if parsed.log_dir:
+            config.trade_log_dir = Path(parsed.log_dir)
+
+        runner = BacktestRunner(
+            max_workers=parsed.workers,
+            enable_plot=parsed.plot,
+            plot_style=parsed.plot_style,
+            plot_file=parsed.plot_file,
+            config=config,
+        )
         result = runner.run(
             strategy=strategy,
             symbols=parsed.symbol,
@@ -127,10 +179,13 @@ def main(args: Optional[list] = None) -> int:
             initial_cash=parsed.cash,
         )
 
-        # 打印结果
-        print_result(result)
+        print_result(result, verbose=parsed.verbose)
 
-        # 保存结果
+        if result.log_files:
+            print("\n【日志文件】")
+            for log_type, log_path in result.log_files.items():
+                print(f"  {log_type}: {log_path}")
+
         if parsed.output:
             result.save(parsed.output)
             logger.info(f"结果已保存到: {parsed.output}")
@@ -165,19 +220,52 @@ def load_strategy(strategy_path: str):
         return None
 
 
-def print_result(result):
+def print_result(result, verbose: bool = False):
     """打印回测结果"""
-    print("\n" + "=" * 50)
+    print("\n" + "=" * 60)
     print(f"策略: {result.strategy_name}")
     print(f"周期: {result.start_date} ~ {result.end_date}")
-    print("-" * 50)
-    print(f"初始资金: {result.initial_cash:,.2f}")
-    print(f"最终资产: {result.final_value:,.2f}")
-    print(f"收益率:   {result.return_pct:+.2%}")
-    print(f"交易次数: {result.total_trades}")
-    print(f"胜率:     {result.win_rate:.1%}")
-    print(f"盈亏比:   {result.profit_factor:.2f}")
-    print("=" * 50 + "\n")
+    print("-" * 60)
+    
+    print("【资金概况】")
+    print(f"  初始资金: {result.initial_cash:,.2f}")
+    print(f"  最终资产: {result.final_value:,.2f}")
+    print(f"  总收益:   {result.final_value - result.initial_cash:+,.2f}")
+    print(f"  收益率:   {result.return_pct:+.2%}")
+    
+    print("\n【风险指标】")
+    max_dd = result.calculate_max_drawdown()
+    sharpe = result.calculate_sharpe_ratio()
+    print(f"  最大回撤: {max_dd:.2%}")
+    print(f"  夏普比率: {sharpe:.2f}")
+    
+    print("\n【交易统计】")
+    print(f"  总交易次数: {result.total_trades}")
+    print(f"  胜率:       {result.win_rate:.1%}")
+    print(f"  盈亏比:     {result.profit_factor:.2f}")
+    
+    if result.analyzer_results:
+        print("\n【分析器结果】")
+        for key, value in result.analyzer_results.items():
+            if isinstance(value, float):
+                print(f"  {key}: {value:.4f}")
+            else:
+                print(f"  {key}: {value}")
+    
+    if verbose and result.trades:
+        print("\n【交易记录】")
+        trades_df = __import__('pandas').DataFrame(result.trades)
+        if not trades_df.empty:
+            print(trades_df.to_string(index=False))
+    
+    if verbose and result.daily_values:
+        print(f"\n【每日资产】共 {len(result.daily_values)} 条记录")
+        dv_df = __import__('pandas').DataFrame(result.daily_values)
+        print(dv_df.head(10).to_string(index=False))
+        print("...")
+        print(dv_df.tail(5).to_string(index=False))
+    
+    print("=" * 60 + "\n")
 
 
 if __name__ == '__main__':

@@ -54,7 +54,10 @@ class BaseStrategy(bt.Strategy):
 
         # 订单跟踪
         self.orders: List[bt.Order] = []
+        # 交易记录（订单级别）
         self.trades: List[Dict[str, Any]] = []
+        # 交易闭环记录（包含 pnl）
+        self.closed_trades: List[Dict[str, Any]] = []
 
         # 持仓信息（用于T+1检查）
         self._buy_dates: Dict[str, datetime] = {}
@@ -124,6 +127,15 @@ class BaseStrategy(bt.Strategy):
         if not trade.isclosed:
             return
 
+        # 记录交易闭环（包含 pnl）
+        self.closed_trades.append({
+            'date': self.datas[0].datetime.date(0),
+            'symbol': trade.data._name if hasattr(trade.data, '_name') else 'unknown',
+            'pnl': trade.pnl,           # 毛盈亏
+            'pnlcomm': trade.pnlcomm,   # 净盈亏（扣除手续费）
+            'commission': trade.commission,
+        })
+
         self.log(
             f"交易闭环: 毛盈亏={trade.pnl:.2f}, "
             f"净盈亏={trade.pnlcomm:.2f}"
@@ -176,7 +188,7 @@ class BaseStrategy(bt.Strategy):
         获取交易记录 DataFrame
 
         Returns:
-            pandas DataFrame
+            pandas DataFrame，包含 pnl 字段
         """
         import pandas as pd
-        return pd.DataFrame(self.trades)
+        return pd.DataFrame(self.closed_trades) if self.closed_trades else pd.DataFrame()

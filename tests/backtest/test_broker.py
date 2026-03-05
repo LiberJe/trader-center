@@ -7,14 +7,13 @@ def test_astock_commission_scheme():
 
     comm = AStockCommission()
 
-    # 买入 10万元，万2.5佣金
+    # 买入 10万元，万2.5佣金 = 100000 * 0.00025 = 25元
     buy_cost = comm.getcommission(size=1000, price=100.0)
-    # 1000 * 100 = 100000，万2.5 = 25元
-    assert buy_cost == 25.0
+    assert buy_cost == 25.0, f"Expected 25.0, got {buy_cost}"
 
-    # 卖出 10万元，万2.5佣金 + 千1印花税 = 25 + 100 = 125
+    # 卖出 10万元，万2.5佣金 + 千1印花税 = 25 + 100 = 125元
     sell_cost = comm.getcommission(size=-1000, price=100.0)
-    assert sell_cost == 125.0
+    assert sell_cost == 125.0, f"Expected 125.0, got {sell_cost}"
 
 
 def test_minimum_commission():

@@ -59,7 +59,11 @@ def test_backtest_full_flow(sample_data, monkeypatch):
     assert result.error_message is None
     # 买入持有应该有盈利（上升趋势）
     assert result.final_value > result.initial_cash
-    assert result.total_trades >= 1
+    # 验证 daily_values 已填充
+    assert len(result.daily_values) > 0
+    # 验证分析器结果
+    assert 'total_return' in result.analyzer_results
+    assert result.analyzer_results['total_return'] > 0
 
 
 def test_backtest_with_error_handling(sample_data, monkeypatch):

@@ -10,6 +10,8 @@
 - **多策略并行**: 支持多进程并行回测
 - **独立账户管理**: 每个策略独立资金和持仓
 - **绩效分析**: 收益率、最大回撤、夏普比率等指标
+- **自动日志输出**: 交易日志自动保存到工程目录
+- **可视化图表保存**: 回测图表自动保存到指定目录
 
 ## 快速开始
 
@@ -47,9 +49,16 @@ class SmaCrossStrategy(BaseStrategy):
 ### 2. 运行回测
 
 ```python
-from trader_center.backtest import BacktestRunner
+from trader_center.backtest import BacktestRunner, BacktestConfig
 
-runner = BacktestRunner()
+# 使用自定义配置
+config = BacktestConfig(
+    initial_cash=100000,
+    auto_save_trades=True,
+    auto_save_plot=True,
+)
+
+runner = BacktestRunner(config=config)
 result = runner.run(
     strategy=SmaCrossStrategy,
     symbols=["000001.SZ"],
@@ -64,21 +73,27 @@ print(f"收益率: {result.return_pct:.2%}")
 print(f"交易次数: {result.total_trades}")
 print(f"最大回撤: {result.calculate_max_drawdown():.2%}")
 
-# 保存结果
-result.save("result.json")
+# 查看保存的日志文件
+print(f"日志文件: {result.log_files}")
 ```
 
 ### 3. 命令行使用
 
 ```bash
-# 运行示例策略
+# 运行示例策略（自动保存交易日志到 logs/backtest/）
 python -m trader_center.backtest \
     --strategy trader_center.backtest.strategy.examples.SmaCrossStrategy \
     --symbol 000001.SZ \
     --start 2024-01-01 \
     --end 2024-12-31 \
-    --cash 100000 \
-    --output result.json
+    --cash 100000
+
+# 启用可视化并自动保存图表
+python -m trader_center.backtest \
+    -s trader_center.backtest.strategy.examples.SmaCrossStrategy \
+    -sym 000001.SZ \
+    -f 2024-01-01 -t 2024-12-31 \
+    --plot
 
 # 多股票回测
 python -m trader_center.backtest \
@@ -86,7 +101,53 @@ python -m trader_center.backtest \
     -sym 000001.SZ -sym 000002.SZ \
     -f 2024-01-01 -t 2024-12-31 \
     -o result.csv
+
+# 指定日志输出目录
+python -m trader_center.backtest \
+    -s trader_center.backtest.strategy.examples.SmaCrossStrategy \
+    -sym 000001.SZ \
+    --log-dir ./my_logs
+
+# 使用 JSON 格式保存交易日志
+python -m trader_center.backtest \
+    -s trader_center.backtest.strategy.examples.SmaCrossStrategy \
+    -sym 000001.SZ \
+    --log-format json
 ```
+
+## 输出目录结构
+
+每次回测生成一个独立目录，包含所有输出文件，避免重复运行覆盖：
+
+```
+logs/
+└── backtest/
+    ├── sma_cross/
+    │   ├── 20240306_143052_a1b2c3/
+    │   │   ├── trades.csv
+    │   │   ├── daily_values.csv
+    │   │   ├── summary.json
+    │   │   └── plot.png
+    │   └── 20240306_150123_d4e5f6/
+    │       └── ...
+    └── rsi_strategy/
+        └── 20240305_091234_g7h8i9/
+            └── ...
+```
+
+目录命名格式：`{strategy_name}/{timestamp}_{hash}`
+- `strategy_name`: 策略名称（一级目录）
+- `timestamp`: 运行时间 (YYYYMMDD_HHMMSS)
+- `hash`: 短哈希值 (6位)，避免冲突
+
+### 输出文件说明
+
+| 文件 | 说明 |
+|------|------|
+| `trades.csv` | 交易记录（日期、股票、买卖、价格、数量、盈亏等） |
+| `daily_values.csv` | 每日资产价值（日期、资产、现金） |
+| `summary.json` | 回测摘要（策略名称、参数、收益率、风险指标等） |
+| `plot.png` | 可视化图表（资产曲线、回撤、收益分布） |
 
 ## 模块结构
 
@@ -176,6 +237,7 @@ result.return_pct       # 总收益率
 result.total_trades     # 交易次数
 result.win_rate         # 胜率
 result.profit_factor    # 盈亏比
+result.log_files        # 保存的日志文件路径
 
 # 绩效指标
 result.calculate_max_drawdown()    # 最大回撤
@@ -185,6 +247,12 @@ result.calculate_sharpe_ratio()    # 夏普比率
 result.to_summary()     # 摘要字典
 result.to_dataframe()   # DataFrame
 result.save("file.json") # 保存到文件（支持 json/csv/html）
+
+# 手动保存日志
+result.save_trades(output_dir, format="csv")
+result.save_daily_values(output_dir)
+result.save_summary(output_dir)
+result.save_all_logs(output_dir, format="csv")
 ```
 
 ### A股 Broker 配置
@@ -242,17 +310,27 @@ from trader_center.backtest.strategy.examples import BuyAndHoldStrategy
 ## 配置选项
 
 ```python
-from trader_center.backtest.config import BacktestConfig
+from trader_center.backtest import BacktestConfig
 
 config = BacktestConfig(
+    # 资金配置
     initial_cash=100000,      # 初始资金
-    commission_rate=0.00025,  # 佣金率
-    stamp_duty_rate=0.001,    # 印花税率
+    commission_rate=0.00025,  # 佣金率（万2.5）
+    stamp_duty_rate=0.001,    # 印花税率（千1）
     min_commission=5.0,       # 最低佣金
+
+    # 交易限制
     limit_up_pct=0.10,        # 涨停幅度
     limit_down_pct=0.10,      # 跌停幅度
+
+    # 执行配置
     max_workers=None,         # 并行进程数
-    output_dir=Path("~/.trader_center/backtest_results")
+
+    # 日志输出配置
+    trade_log_dir=Path("logs/backtest"),      # 日志输出目录
+    auto_save_trades=True,                     # 自动保存交易日志
+    trade_log_format="csv",                    # 日志格式（csv/json）
+    auto_save_plot=True,                       # 自动保存图表
 )
 ```
 
@@ -262,20 +340,32 @@ config = BacktestConfig(
 python -m trader_center.backtest [选项]
 
 选项:
-  -s, --strategy    策略模块路径（必需）
-  -sym, --symbol    股票代码，可多次指定（必需）
-  -f, --start       开始日期 (YYYY-MM-DD)
-  -t, --end         结束日期 (YYYY-MM-DD)
-  -c, --cash        初始资金（默认10万）
-  -w, --workers     并行进程数（默认1）
-  -o, --output      输出文件 (.json/.csv/.html)
-  -v, --verbose     详细输出
+  -s, --strategy      策略模块路径（必需）
+  -sym, --symbol      股票代码，可多次指定（必需）
+  -f, --start         开始日期 (YYYY-MM-DD)
+  -t, --end           结束日期 (YYYY-MM-DD)
+  -c, --cash          初始资金（默认10万）
+  -w, --workers       并行进程数（默认1）
+  -o, --output        输出文件 (.json/.csv/.html)
+  -v, --verbose       详细输出
+
+  日志选项:
+  --log-dir           日志输出目录（默认 logs/backtest/）
+  --no-auto-save      禁用自动保存日志
+  --log-format        日志格式（csv/json，默认csv）
+
+  可视化选项:
+  -p, --plot          显示可视化图表
+  --plot-style        图表样式（candle/line/bar，默认candle）
+  --plot-file         保存图表到指定文件（覆盖自动保存）
+  --no-auto-save-plot 禁用自动保存图表
 ```
 
 ## 依赖
 
 - backtrader
 - pandas
+- matplotlib（可视化）
 - DataHub 模块（自动集成）
 
 ## 注意事项
@@ -284,6 +374,7 @@ python -m trader_center.backtest [选项]
 2. **T+1限制**: 策略中需使用 `can_sell_today()` 检查卖出条件
 3. **涨跌停**: 极端行情下，backtrader 的市价单可能以涨停/跌停价成交
 4. **复权处理**: 数据默认使用前复权，回测结果反映真实收益率
+5. **日志目录**: 默认输出到 `logs/backtest/`，可通过 `--log-dir` 指定其他目录
 
 ## 测试
 

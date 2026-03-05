@@ -21,14 +21,16 @@ class AStockCommissionScheme(bt.CommInfoBase):
     - 佣金：万2.5 (0.025%)
     - 印花税：千1 (0.1%)，仅卖出收取
     - 最低佣金：5元
+    
+    注意：由于完全重写了手续费计算逻辑，commtype 设置为 COMM_FIXED 以避免 backtrader 的百分比处理。
     """
 
     params = (
-        ('commission', 0.025),   # 万2.5 = 0.025% (backtrader uses percentage value)
-        ('stamp_duty', 0.1),      # 千1 = 0.1% 印花税 (only on sell)
+        ('commission', 0.00025),   # 万2.5 = 0.025% = 0.00025 (decimal form)
+        ('stamp_duty', 0.001),      # 千1 = 0.1% = 0.001 印花税 (only on sell)
         ('min_commission', 5.0),    # 最低5元
         ('stocklike', True),
-        ('commtype', bt.CommInfoBase.COMM_PERC),
+        ('commtype', bt.CommInfoBase.COMM_FIXED),  # 使用 FIXED 模式，避免百分比转换
     )
 
     def getcommission(self, size: float, price: float, pseudoexec: bool = False) -> float:
@@ -46,14 +48,14 @@ class AStockCommissionScheme(bt.CommInfoBase):
         amount = abs(size) * price
         is_buy = size > 0
 
-        # 佣金（买卖都收）- commission is already in decimal (0.00025)
+        # 佣金（买卖都收）- commission is in decimal (0.00025 = 万2.5)
         commission = amount * self.p.commission
         commission = max(commission, self.p.min_commission)
 
-        # 印花税（仅卖出）- stamp_duty is in percentage (0.1%), convert to decimal
+        # 印花税（仅卖出）- stamp_duty is in decimal (0.001 = 千1)
         stamp_duty = 0
         if not is_buy:
-            stamp_duty = amount * (self.p.stamp_duty / 100)
+            stamp_duty = amount * self.p.stamp_duty
 
         return commission + stamp_duty
 

@@ -5,9 +5,12 @@
 """
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from typing import List, Dict, Optional, Any
+from pathlib import Path
 import pandas as pd
+import json
+import hashlib
 
 
 @dataclass
@@ -27,6 +30,8 @@ class BacktestResult:
         end_date: 回测结束日期
         logs: 日志记录
         params: 策略参数
+        analyzer_results: 分析器结果
+        run_id: 唯一运行ID
     """
 
     strategy_name: str
@@ -39,10 +44,41 @@ class BacktestResult:
     daily_values: List[Dict[str, Any]] = field(default_factory=list)
     logs: List[str] = field(default_factory=list)
     params: Optional[Dict[str, Any]] = None
+    analyzer_results: Dict[str, Any] = field(default_factory=dict)
 
-    # 运行时信息
     duration_seconds: Optional[float] = None
     error_message: Optional[str] = None
+
+    run_id: Optional[str] = None
+    log_files: Dict[str, str] = field(default_factory=dict)
+
+    def generate_run_id(self) -> str:
+        """
+        生成唯一运行ID
+
+        Returns:
+            格式为 {timestamp}_{hash} 的运行ID
+        """
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        content = f"{self.strategy_name}_{timestamp}_{self.params or {}}"
+        hash_val = hashlib.md5(content.encode()).hexdigest()[:6]
+        return f"{timestamp}_{hash_val}"
+
+    def get_run_dir(self, base_dir: Path) -> Path:
+        """
+        获取本次回测的输出目录
+
+        Args:
+            base_dir: 基础输出目录
+
+        Returns:
+            本次回测的输出目录路径
+        """
+        if not self.run_id:
+            self.run_id = self.generate_run_id()
+        run_dir = base_dir / self.strategy_name / self.run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        return run_dir
 
     @property
     def return_pct(self) -> float:
@@ -122,7 +158,7 @@ class BacktestResult:
 
     def to_summary(self) -> Dict[str, Any]:
         """生成摘要字典"""
-        return {
+        summary = {
             'strategy_name': self.strategy_name,
             'params': self.params,
             'period': f"{self.start_date} ~ {self.end_date}",
@@ -136,10 +172,131 @@ class BacktestResult:
             'sharpe_ratio': f"{self.calculate_sharpe_ratio():.2f}",
             'duration_seconds': self.duration_seconds,
         }
+        # 添加分析器结果（如果有）
+        if self.analyzer_results:
+            summary['analyzer'] = self.analyzer_results
+        return summary
 
     def to_dataframe(self) -> pd.DataFrame:
         """转换为 DataFrame（一行）"""
         return pd.DataFrame([self.to_summary()])
+
+    def save_trades(self, output_dir: Path, format: str = "csv") -> Optional[Path]:
+        """
+        保存交易日志
+
+        Args:
+            output_dir: 输出目录
+            format: 格式（csv/json）
+
+        Returns:
+            保存的文件路径，如果无交易则返回 None
+        """
+        if not self.trades:
+            return None
+
+        run_dir = self.get_run_dir(output_dir)
+
+        if format == "json":
+            filepath = run_dir / "trades.json"
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(self.trades, f, indent=2, default=str, ensure_ascii=False)
+        else:
+            filepath = run_dir / "trades.csv"
+            df = pd.DataFrame(self.trades)
+            df.to_csv(filepath, index=False, encoding='utf-8')
+
+        self.log_files['trades'] = str(filepath)
+        return filepath
+
+    def save_daily_values(self, output_dir: Path) -> Optional[Path]:
+        """
+        保存每日资产价值
+
+        Args:
+            output_dir: 输出目录
+
+        Returns:
+            保存的文件路径，如果无数据则返回 None
+        """
+        if not self.daily_values:
+            return None
+
+        run_dir = self.get_run_dir(output_dir)
+
+        filepath = run_dir / "daily_values.csv"
+        df = pd.DataFrame(self.daily_values)
+        df.to_csv(filepath, index=False, encoding='utf-8')
+
+        self.log_files['daily_values'] = str(filepath)
+        return filepath
+
+    def save_summary(self, output_dir: Path) -> Path:
+        """
+        保存回测摘要
+
+        Args:
+            output_dir: 输出目录
+
+        Returns:
+            保存的文件路径
+        """
+        run_dir = self.get_run_dir(output_dir)
+
+        filepath = run_dir / "summary.json"
+        summary_data = {
+            'run_id': self.run_id,
+            'summary': self.to_summary(),
+            'params': self.params,
+            'error_message': self.error_message,
+        }
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(summary_data, f, indent=2, default=str, ensure_ascii=False)
+
+        self.log_files['summary'] = str(filepath)
+        return filepath
+
+    def save_plot(self, output_dir: Path, plot_path: Optional[Path] = None) -> Optional[Path]:
+        """
+        保存图表文件路径记录
+
+        Args:
+            output_dir: 输出目录
+            plot_path: 图表文件路径（如果已保存）
+
+        Returns:
+            图表文件路径
+        """
+        if plot_path:
+            self.log_files['plot'] = str(plot_path)
+            return plot_path
+        return None
+
+    def save_all_logs(self, output_dir: Path, format: str = "csv") -> Dict[str, str]:
+        """
+        保存所有日志文件
+
+        Args:
+            output_dir: 输出目录
+            format: 交易日志格式
+
+        Returns:
+            保存的文件路径字典
+        """
+        saved_files = {}
+
+        trades_path = self.save_trades(output_dir, format)
+        if trades_path:
+            saved_files['trades'] = str(trades_path)
+
+        daily_path = self.save_daily_values(output_dir)
+        if daily_path:
+            saved_files['daily_values'] = str(daily_path)
+
+        summary_path = self.save_summary(output_dir)
+        saved_files['summary'] = str(summary_path)
+
+        return saved_files
 
     def save(self, filepath: str):
         """

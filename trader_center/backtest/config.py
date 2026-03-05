@@ -23,29 +23,32 @@ class BacktestConfig:
         limit_down_pct: 跌停幅度（默认10%）
         max_workers: 并行进程数（默认None=CPU核心数）
         output_dir: 结果输出目录
+        auto_save_trades: 是否自动保存交易日志
+        trade_log_format: 交易日志格式（csv/json）
+        auto_save_plot: 是否自动保存图表（启用可视化时）
     """
 
-    # 资金配置
     initial_cash: float = 100000.0
 
-    # 手续费配置
-    commission_rate: float = 0.00025  # 万2.5
-    stamp_duty_rate: float = 0.001     # 千1
-    min_commission: float = 5.0        # 最低5元
+    commission_rate: float = 0.00025
+    stamp_duty_rate: float = 0.001
+    min_commission: float = 5.0
 
-    # 交易限制
-    limit_up_pct: float = 0.10    # 涨停10%
-    limit_down_pct: float = 0.10  # 跌停10%
+    limit_up_pct: float = 0.10
+    limit_down_pct: float = 0.10
 
-    # 执行配置
     max_workers: Optional[int] = None
 
-    # 输出配置
-    output_dir: Path = field(default_factory=lambda: Path.home() / ".trader_center" / "backtest_results")
+    output_dir: Path = field(default_factory=lambda: Path.cwd() / "logs" / "backtest_results")
+
+    trade_log_dir: Path = field(default_factory=lambda: Path.cwd() / "logs" / "backtest")
+    auto_save_trades: bool = True
+    trade_log_format: str = "csv"
+    auto_save_plot: bool = True
 
     def __post_init__(self):
-        # 确保输出目录存在
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.trade_log_dir.mkdir(parents=True, exist_ok=True)
 
     def to_dict(self) -> Dict[str, Any]:
         """导出为字典"""
@@ -58,12 +61,18 @@ class BacktestConfig:
             'limit_down_pct': self.limit_down_pct,
             'max_workers': self.max_workers,
             'output_dir': str(self.output_dir),
+            'trade_log_dir': str(self.trade_log_dir),
+            'auto_save_trades': self.auto_save_trades,
+            'trade_log_format': self.trade_log_format,
+            'auto_save_plot': self.auto_save_plot,
         }
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> 'BacktestConfig':
         """从字典创建配置"""
-        config = cls(**d)
         if 'output_dir' in d:
-            config.output_dir = Path(d['output_dir'])
-        return config
+            d['output_dir'] = Path(d['output_dir'])
+        if 'trade_log_dir' in d:
+            d['trade_log_dir'] = Path(d['trade_log_dir'])
+        d.pop('plot_output_dir', None)
+        return cls(**d)

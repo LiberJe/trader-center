@@ -33,11 +33,8 @@ class AkshareFetcher(DataFetcher):
         """检查 akshare 是否可用"""
         try:
             import akshare as ak
-
-            # 简单测试调用
-            _ = ak.stock_zh_a_spot_em()
             return True
-        except Exception:
+        except ImportError:
             return False
 
     def _parse_symbol(self, symbol: str) -> tuple[str, str]:
@@ -102,49 +99,84 @@ class AkshareFetcher(DataFetcher):
                 return row[col]
         return default
 
+    def _symbol_to_tx(self, code: str, exchange: str) -> str:
+        """转换为腾讯接口格式: '000001' + 'SZ' -> 'sz000001'"""
+        return f"{exchange.lower()}{code}"
+
     def get_bars(
         self, symbol: str, start: datetime, end: datetime, frequency: str
     ) -> List[BarData]:
         """获取K线数据"""
         ak = self._get_ak()
         code, exchange = self._parse_symbol(symbol)
-        period = self._map_frequency(frequency)
 
-        # 调用 akshare 接口
-        df = ak.stock_zh_a_hist(
-            symbol=code,
-            period=period,
-            start_date=start.strftime("%Y%m%d"),
-            end_date=end.strftime("%Y%m%d"),
-            adjust="qfq",  # 前复权
-        )
+        try:
+            # 优先使用腾讯接口（更稳定）
+            tx_symbol = self._symbol_to_tx(code, exchange)
+            df = ak.stock_zh_a_hist_tx(
+                symbol=tx_symbol,
+                start_date=start.strftime("%Y-%m-%d"),
+                end_date=end.strftime("%Y-%m-%d"),
+                adjust="qfq",
+            )
+        except Exception as e:
+            self.logger.warning(f"腾讯接口获取失败，尝试东方财富: {e}")
+            try:
+                # 回退到东方财富接口
+                period = self._map_frequency(frequency)
+                df = ak.stock_zh_a_hist(
+                    symbol=code,
+                    period=period,
+                    start_date=start.strftime("%Y%m%d"),
+                    end_date=end.strftime("%Y%m%d"),
+                    adjust="qfq",
+                )
+                # 东方财富接口的列名映射
+                if not df.empty and "日期" in df.columns:
+                    df = df.rename(columns={
+                        "日期": "date",
+                        "开盘": "open",
+                        "收盘": "close",
+                        "最高": "high",
+                        "最低": "low",
+                        "成交量": "volume",
+                        "成交额": "amount",
+                    })
+            except Exception as e2:
+                self.logger.error(f"东方财富接口也失败: {e2}")
+                return []
 
         if df.empty:
             return []
 
-        # 转换为 BarData 列表
         bars = []
         for _, row in df.iterrows():
-            bar = BarData(
-                symbol=symbol,
-                timestamp=datetime.strptime(str(row["日期"]), "%Y-%m-%d"),
-                frequency=(
-                    Frequency(frequency)
-                    if frequency in [f.value for f in Frequency]
-                    else Frequency.DAILY
-                ),
-                open=float(row["开盘"]),
-                high=float(row["最高"]),
-                low=float(row["最低"]),
-                close=float(row["收盘"]),
-                volume=float(row["成交量"]),
-                amount=(
-                    float(row["成交额"])
-                    if "成交额" in row and pd.notna(row["成交额"])
-                    else None
-                ),
-            )
-            bars.append(bar)
+            try:
+                date_val = row.get("date") or row.get("日期")
+                if isinstance(date_val, str):
+                    timestamp = datetime.strptime(date_val, "%Y-%m-%d")
+                else:
+                    timestamp = datetime.strptime(str(date_val), "%Y-%m-%d")
+
+                bar = BarData(
+                    symbol=symbol,
+                    timestamp=timestamp,
+                    frequency=(
+                        Frequency(frequency)
+                        if frequency in [f.value for f in Frequency]
+                        else Frequency.DAILY
+                    ),
+                    open=float(row.get("open", row.get("开盘", 0))),
+                    high=float(row.get("high", row.get("最高", 0))),
+                    low=float(row.get("low", row.get("最低", 0))),
+                    close=float(row.get("close", row.get("收盘", 0))),
+                    volume=float(row.get("volume", row.get("成交量", row.get("amount", 0)))),
+                    amount=float(row.get("amount", row.get("成交额", 0))) if "amount" in row or "成交额" in row else None,
+                )
+                bars.append(bar)
+            except Exception as ex:
+                self.logger.warning(f"解析K线数据失败: {ex}, row: {row}")
+                continue
 
         return bars
 

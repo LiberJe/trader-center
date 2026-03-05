@@ -20,6 +20,9 @@ def __getattr__(name):
     if name == "BacktestResult":
         from .results import BacktestResult
         return BacktestResult
+    if name == "BacktestConfig":
+        from .config import BacktestConfig
+        return BacktestConfig
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -27,4 +30,5 @@ __all__ = [
     "BaseStrategy",
     "BacktestRunner",
     "BacktestResult",
+    "BacktestConfig",
 ]
