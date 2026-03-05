@@ -5,9 +5,11 @@
 """
 
 import backtrader as bt
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional, List, Dict, Any
 import logging
+
+from trader_center.backtest.trade_logger import TradeLogger
 
 
 class BaseStrategy(bt.Strategy):
@@ -52,15 +54,17 @@ class BaseStrategy(bt.Strategy):
         super().__init__()
         self.logger = logging.getLogger(f"backtest.strategy.{self.name}")
 
-        # 订单跟踪
+        self.trade_logger = TradeLogger(self.name)
+
         self.orders: List[bt.Order] = []
-        # 交易记录（订单级别）
         self.trades: List[Dict[str, Any]] = []
-        # 交易闭环记录（包含 pnl）
         self.closed_trades: List[Dict[str, Any]] = []
 
-        # 持仓信息（用于T+1检查）
         self._buy_dates: Dict[str, datetime] = {}
+        self._order_id_map: Dict[int, str] = {}
+        self._position_entry_dates: Dict[str, date] = {}
+        self._last_capital_date: Optional[date] = None
+        self._last_total_value: Optional[float] = None
 
     def log(self, txt: str, dt: Optional[datetime] = None):
         """
@@ -74,6 +78,111 @@ class BaseStrategy(bt.Strategy):
         msg = f"[{dt.isoformat()}] {txt}"
         self.logger.info(msg)
 
+    def log_signal(
+        self,
+        signal_type: str,
+        data: Optional[bt.DataBase] = None,
+        trigger_condition: str = "",
+        indicator_values: Optional[Dict[str, Any]] = None,
+        confidence: float = 1.0,
+        target_price: Optional[float] = None,
+        stop_loss: Optional[float] = None,
+        take_profit: Optional[float] = None,
+    ):
+        """
+        记录交易信号
+
+        Args:
+            signal_type: 信号类型 ('buy' / 'sell')
+            data: 数据对象，默认使用第一个数据
+            trigger_condition: 触发条件描述
+            indicator_values: 指标值快照
+            confidence: 信号强度 (0-1)
+            target_price: 目标价格
+            stop_loss: 止损价
+            take_profit: 止盈价
+        """
+        data = data or self.datas[0]
+        symbol = data._name if hasattr(data, '_name') else 'unknown'
+        dt = data.datetime.datetime(0)
+        
+        self.trade_logger.log_signal(
+            signal_type=signal_type,
+            symbol=symbol,
+            trigger_condition=trigger_condition,
+            indicator_values=indicator_values or {},
+            confidence=confidence,
+            target_price=target_price,
+            stop_loss=stop_loss,
+            take_profit=take_profit,
+            dt=dt,
+        )
+        
+        self.log(f"信号 [{signal_type.upper()}] {symbol}: {trigger_condition}")
+
+    def log_daily_capital(self):
+        """
+        记录每日资金状态
+
+        在 next() 中调用，记录当天的资金快照。
+        """
+        current_date = self.datas[0].datetime.date(0)
+        
+        if self._last_capital_date == current_date:
+            return
+        
+        cash = self.broker.getcash()
+        total_value = self.broker.getvalue()
+        position_value = total_value - cash
+        
+        daily_pnl = 0.0
+        if self._last_total_value is not None:
+            daily_pnl = total_value - self._last_total_value
+        
+        self.trade_logger.log_capital(
+            log_date=current_date,
+            cash=cash,
+            position_value=position_value,
+            total_value=total_value,
+            daily_pnl=daily_pnl,
+        )
+        
+        self._last_capital_date = current_date
+        self._last_total_value = total_value
+
+    def log_daily_positions(self):
+        """
+        记录每日持仓状态
+
+        在 next() 中调用，记录当天的持仓详情。
+        """
+        current_date = self.datas[0].datetime.date(0)
+        
+        for data in self.datas:
+            symbol = data._name if hasattr(data, '_name') else 'unknown'
+            position = self.getposition(data)
+            
+            if position.size == 0:
+                continue
+            
+            cost_price = position.price
+            current_price = data.close[0]
+            size = int(position.size)
+            
+            holding_days = 0
+            if symbol in self._position_entry_dates:
+                entry_date = self._position_entry_dates[symbol]
+                holding_days = (current_date - entry_date).days
+            
+            self.trade_logger.log_position(
+                log_date=current_date,
+                symbol=symbol,
+                size=size,
+                cost_price=cost_price,
+                current_price=current_price,
+                holding_days=holding_days,
+            )
+
     def notify_order(self, order: bt.Order):
         """
         订单状态通知回调
@@ -83,11 +192,28 @@ class BaseStrategy(bt.Strategy):
         Args:
             order: backtrader Order 对象
         """
-        if order.status in [order.Submitted, order.Accepted]:
+        symbol = order.data._name if hasattr(order.data, '_name') else 'unknown'
+        action = 'buy' if order.isbuy() else 'sell'
+        dt = self.datas[0].datetime.datetime(0)
+        order_key = id(order)
+        
+        if order.status == order.Submitted:
+            if order_key not in self._order_id_map:
+                order_log = self.trade_logger.log_order_submit(
+                    symbol=symbol,
+                    action=action,
+                    expected_price=order.created.price if order.created.price > 0 else self.datas[0].close[0],
+                    expected_size=int(abs(order.created.size)),
+                    order_type='limit' if order.exectype == bt.Order.Limit else 'market',
+                    dt=dt,
+                )
+                self._order_id_map[order_key] = order_log.order_id
+            return
+        
+        if order.status == order.Accepted:
             return
 
         if order.status == order.Completed:
-            action = "买入" if order.isbuy() else "卖出"
             self.log(
                 f"订单成交 {action}: 价格={order.executed.price:.2f}, "
                 f"数量={order.executed.size}, "
@@ -95,25 +221,44 @@ class BaseStrategy(bt.Strategy):
                 f"手续费={order.executed.comm:.2f}"
             )
 
-            # 记录交易
             self.trades.append({
                 'date': self.datas[0].datetime.date(0),
-                'action': 'buy' if order.isbuy() else 'sell',
+                'action': action,
                 'price': order.executed.price,
                 'size': order.executed.size,
                 'value': order.executed.value,
                 'commission': order.executed.comm,
             })
 
-            # 记录买入日期（用于T+1检查）
+            if order_key in self._order_id_map:
+                self.trade_logger.log_order_status(
+                    order_id=self._order_id_map[order_key],
+                    status='completed',
+                    executed_price=order.executed.price,
+                    executed_size=int(abs(order.executed.size)),
+                    commission=order.executed.comm,
+                )
+
             if order.isbuy():
-                symbol = order.data._name
                 self._buy_dates[symbol] = self.datas[0].datetime.date(0)
+                self._position_entry_dates[symbol] = self.datas[0].datetime.date(0)
 
         elif order.status in [order.Canceled, order.Margin, order.Rejected]:
-            self.log(f"订单失败: {order.status}")
+            status_name = {
+                order.Canceled: 'canceled',
+                order.Margin: 'margin',
+                order.Rejected: 'rejected',
+            }.get(order.status, 'unknown')
+            
+            self.log(f"订单失败: {status_name}")
+            
+            if order_key in self._order_id_map:
+                self.trade_logger.log_order_status(
+                    order_id=self._order_id_map[order_key],
+                    status=status_name,
+                    message=f"Order {status_name}",
+                )
 
-        # 从跟踪列表中移除已完成/失败的订单
         if order in self.orders:
             self.orders.remove(order)
 
@@ -168,17 +313,28 @@ class BaseStrategy(bt.Strategy):
         """第一个有完整数据的 bar"""
         pass
 
+    def _log_daily_state(self):
+        """
+        记录每日状态（资金和持仓）
+
+        子类可以在 next() 方法中调用此方法来自动记录每日状态。
+        """
+        self.log_daily_capital()
+        self.log_daily_positions()
+
     def next(self):
         """
         逐 K 线执行
 
         子类必须重写此方法实现策略逻辑。
+        建议在子类的 next() 方法开头调用 self._log_daily_state() 来记录每日状态。
         """
         raise NotImplementedError("子类必须实现 next() 方法")
 
     def stop(self):
         """回测结束时调用"""
-        # 计算并记录最终收益
+        self._log_daily_state()
+        
         portfolio_value = self.broker.getvalue()
         cash = self.broker.getcash()
         self.log(f"回测结束: 总资产={portfolio_value:.2f}, 现金={cash:.2f}")

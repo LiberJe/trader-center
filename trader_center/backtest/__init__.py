@@ -9,7 +9,6 @@ Example:
 
 __version__ = "0.1.0"
 
-# 延迟导入，避免循环依赖
 def __getattr__(name):
     if name == "BaseStrategy":
         from .strategy.base import BaseStrategy
@@ -23,6 +22,9 @@ def __getattr__(name):
     if name == "BacktestConfig":
         from .config import BacktestConfig
         return BacktestConfig
+    if name == "TradeLogger":
+        from .trade_logger import TradeLogger
+        return TradeLogger
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -31,4 +33,5 @@ __all__ = [
     "BacktestRunner",
     "BacktestResult",
     "BacktestConfig",
+    "TradeLogger",
 ]

@@ -26,6 +26,10 @@ class BacktestConfig:
         auto_save_trades: 是否自动保存交易日志
         trade_log_format: 交易日志格式（csv/json）
         auto_save_plot: 是否自动保存图表（启用可视化时）
+        enable_signal_log: 是否启用信号日志
+        enable_capital_log: 是否启用资金日志
+        enable_position_log: 是否启用持仓日志
+        enable_order_log: 是否启用订单日志
     """
 
     initial_cash: float = 100000.0
@@ -46,6 +50,11 @@ class BacktestConfig:
     trade_log_format: str = "csv"
     auto_save_plot: bool = True
 
+    enable_signal_log: bool = True
+    enable_capital_log: bool = True
+    enable_position_log: bool = True
+    enable_order_log: bool = True
+
     def __post_init__(self):
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.trade_log_dir.mkdir(parents=True, exist_ok=True)
@@ -65,6 +74,10 @@ class BacktestConfig:
             'auto_save_trades': self.auto_save_trades,
             'trade_log_format': self.trade_log_format,
             'auto_save_plot': self.auto_save_plot,
+            'enable_signal_log': self.enable_signal_log,
+            'enable_capital_log': self.enable_capital_log,
+            'enable_position_log': self.enable_position_log,
+            'enable_order_log': self.enable_order_log,
         }
 
     @classmethod

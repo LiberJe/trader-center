@@ -225,6 +225,18 @@ class BacktestRunner:
             # 提取交易记录
             trades = strat.get_trades_df().to_dict('records') if hasattr(strat, 'get_trades_df') else []
 
+            # 提取新日志数据
+            signal_log = []
+            capital_log = []
+            position_log = []
+            order_log = []
+            
+            if hasattr(strat, 'trade_logger'):
+                signal_log = strat.trade_logger.get_signals_df().to_dict('records')
+                capital_log = strat.trade_logger.get_capitals_df().to_dict('records')
+                position_log = strat.trade_logger.get_positions_df().to_dict('records')
+                order_log = strat.trade_logger.get_orders_df().to_dict('records')
+
             # 提取分析器结果
             analyzer_results = {}
             try:
@@ -269,6 +281,10 @@ class BacktestRunner:
                 params=strategy_params,
                 duration_seconds=time.time() - start_time,
                 analyzer_results=analyzer_results,
+                signal_log=signal_log,
+                capital_log=capital_log,
+                position_log=position_log,
+                order_log=order_log,
             )
 
             if self.config.auto_save_trades:

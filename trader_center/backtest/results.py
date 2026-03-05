@@ -26,12 +26,14 @@ class BacktestResult:
         final_value: 最终资产价值
         trades: 交易记录列表
         daily_values: 每日资产价值序列
-        start_date: 回测开始日期
-        end_date: 回测结束日期
         logs: 日志记录
         params: 策略参数
         analyzer_results: 分析器结果
         run_id: 唯一运行ID
+        signal_log: 信号日志
+        capital_log: 资金日志
+        position_log: 持仓日志
+        order_log: 订单日志
     """
 
     strategy_name: str
@@ -45,6 +47,11 @@ class BacktestResult:
     logs: List[str] = field(default_factory=list)
     params: Optional[Dict[str, Any]] = None
     analyzer_results: Dict[str, Any] = field(default_factory=dict)
+
+    signal_log: List[Dict[str, Any]] = field(default_factory=list)
+    capital_log: List[Dict[str, Any]] = field(default_factory=list)
+    position_log: List[Dict[str, Any]] = field(default_factory=list)
+    order_log: List[Dict[str, Any]] = field(default_factory=list)
 
     duration_seconds: Optional[float] = None
     error_message: Optional[str] = None
@@ -272,6 +279,118 @@ class BacktestResult:
             return plot_path
         return None
 
+    def save_signal_log(self, output_dir: Path, format: str = "csv") -> Optional[Path]:
+        """
+        保存信号日志
+
+        Args:
+            output_dir: 输出目录
+            format: 格式（csv/json）
+
+        Returns:
+            保存的文件路径，如果无数据则返回 None
+        """
+        if not self.signal_log:
+            return None
+
+        run_dir = self.get_run_dir(output_dir)
+
+        if format == "json":
+            filepath = run_dir / "signals.json"
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(self.signal_log, f, indent=2, default=str, ensure_ascii=False)
+        else:
+            filepath = run_dir / "signals.csv"
+            df = pd.DataFrame(self.signal_log)
+            df.to_csv(filepath, index=False, encoding='utf-8')
+
+        self.log_files['signals'] = str(filepath)
+        return filepath
+
+    def save_capital_log(self, output_dir: Path, format: str = "csv") -> Optional[Path]:
+        """
+        保存资金日志
+
+        Args:
+            output_dir: 输出目录
+            format: 格式（csv/json）
+
+        Returns:
+            保存的文件路径，如果无数据则返回 None
+        """
+        if not self.capital_log:
+            return None
+
+        run_dir = self.get_run_dir(output_dir)
+
+        if format == "json":
+            filepath = run_dir / "capitals.json"
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(self.capital_log, f, indent=2, default=str, ensure_ascii=False)
+        else:
+            filepath = run_dir / "capitals.csv"
+            df = pd.DataFrame(self.capital_log)
+            df.to_csv(filepath, index=False, encoding='utf-8')
+
+        self.log_files['capitals'] = str(filepath)
+        return filepath
+
+    def save_position_log(self, output_dir: Path, format: str = "csv") -> Optional[Path]:
+        """
+        保存持仓日志
+
+        Args:
+            output_dir: 输出目录
+            format: 格式（csv/json）
+
+        Returns:
+            保存的文件路径，如果无数据则返回 None
+        """
+        if not self.position_log:
+            return None
+
+        run_dir = self.get_run_dir(output_dir)
+
+        if format == "json":
+            filepath = run_dir / "positions.json"
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(self.position_log, f, indent=2, default=str, ensure_ascii=False)
+        else:
+            filepath = run_dir / "positions.csv"
+            df = pd.DataFrame(self.position_log)
+            df.to_csv(filepath, index=False, encoding='utf-8')
+
+        self.log_files['positions'] = str(filepath)
+        return filepath
+
+    def save_order_log(self, output_dir: Path, format: str = "csv") -> Optional[Path]:
+        """
+        保存订单日志
+
+        Args:
+            output_dir: 输出目录
+            format: 格式（csv/json）
+
+        Returns:
+            保存的文件路径，如果无数据则返回 None
+        """
+        if not self.order_log:
+            return None
+
+        run_dir = self.get_run_dir(output_dir)
+
+        if format == "json":
+            filepath = run_dir / "orders.json"
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(self.order_log, f, indent=2, default=str, ensure_ascii=False)
+        else:
+            filepath = run_dir / "orders.csv"
+            df = pd.DataFrame(self.order_log)
+            df.to_csv(filepath, index=False, encoding='utf-8')
+
+        self.log_files['orders'] = str(filepath)
+        return filepath
+
     def save_all_logs(self, output_dir: Path, format: str = "csv") -> Dict[str, str]:
         """
         保存所有日志文件
@@ -295,6 +414,22 @@ class BacktestResult:
 
         summary_path = self.save_summary(output_dir)
         saved_files['summary'] = str(summary_path)
+
+        signals_path = self.save_signal_log(output_dir, format)
+        if signals_path:
+            saved_files['signals'] = str(signals_path)
+
+        capitals_path = self.save_capital_log(output_dir, format)
+        if capitals_path:
+            saved_files['capitals'] = str(capitals_path)
+
+        positions_path = self.save_position_log(output_dir, format)
+        if positions_path:
+            saved_files['positions'] = str(positions_path)
+
+        orders_path = self.save_order_log(output_dir, format)
+        if orders_path:
+            saved_files['orders'] = str(orders_path)
 
         return saved_files
 

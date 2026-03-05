@@ -10,6 +10,7 @@
 - **多策略并行**: 支持多进程并行回测
 - **独立账户管理**: 每个策略独立资金和持仓
 - **绩效分析**: 收益率、最大回撤、夏普比率等指标
+- **完整交易日志**: 信号日志、资金日志、持仓日志、订单日志
 - **自动日志输出**: 交易日志自动保存到工程目录
 - **可视化图表保存**: 回测图表自动保存到指定目录
 
@@ -38,11 +39,37 @@ class SmaCrossStrategy(BaseStrategy):
         self.crossover = bt.indicators.CrossOver(self.sma_fast, self.sma_slow)
 
     def next(self):
+        self._log_daily_state()  # 记录每日资金和持仓状态
+        
         if not self.position:
             if self.crossover > 0:  # 金叉买入
+                # 记录买入信号
+                self.log_signal(
+                    signal_type='buy',
+                    data=self.data,
+                    trigger_condition=f'SMA金叉: 快线{self.sma_fast[0]:.2f} > 慢线{self.sma_slow[0]:.2f}',
+                    indicator_values={
+                        'sma_fast': self.sma_fast[0],
+                        'sma_slow': self.sma_slow[0],
+                    },
+                    confidence=0.8,
+                    target_price=self.data.close[0] * 1.1,
+                    stop_loss=self.data.close[0] * 0.95,
+                )
                 self.buy()
         else:
             if self.crossover < 0:  # 死叉卖出
+                # 记录卖出信号
+                self.log_signal(
+                    signal_type='sell',
+                    data=self.data,
+                    trigger_condition=f'SMA死叉: 快线{self.sma_fast[0]:.2f} < 慢线{self.sma_slow[0]:.2f}',
+                    indicator_values={
+                        'sma_fast': self.sma_fast[0],
+                        'sma_slow': self.sma_slow[0],
+                    },
+                    confidence=0.8,
+                )
                 self.sell()
 ```
 
@@ -124,10 +151,14 @@ logs/
 └── backtest/
     ├── sma_cross/
     │   ├── 20240306_143052_a1b2c3/
-    │   │   ├── trades.csv
-    │   │   ├── daily_values.csv
-    │   │   ├── summary.json
-    │   │   └── plot.png
+    │   │   ├── trades.csv           # 交易记录
+    │   │   ├── daily_values.csv     # 每日资产价值
+    │   │   ├── signals.csv          # 信号日志（新增）
+    │   │   ├── capitals.csv         # 资金日志（新增）
+    │   │   ├── positions.csv        # 持仓日志（新增）
+    │   │   ├── orders.csv           # 订单日志（新增）
+    │   │   ├── summary.json         # 回测摘要
+    │   │   └── plot.png             # 可视化图表
     │   └── 20240306_150123_d4e5f6/
     │       └── ...
     └── rsi_strategy/
@@ -142,12 +173,86 @@ logs/
 
 ### 输出文件说明
 
-| 文件 | 说明 |
-|------|------|
-| `trades.csv` | 交易记录（日期、股票、买卖、价格、数量、盈亏等） |
-| `daily_values.csv` | 每日资产价值（日期、资产、现金） |
-| `summary.json` | 回测摘要（策略名称、参数、收益率、风险指标等） |
-| `plot.png` | 可视化图表（资产曲线、回撤、收益分布） |
+| 文件 | 说明 | 主要字段 |
+|------|------|----------|
+| `trades.csv` | 交易闭环记录 | date, symbol, pnl, pnlcomm, commission |
+| `daily_values.csv` | 每日资产价值 | date, value, cash |
+| `signals.csv` | 交易信号日志 | datetime, symbol, signal_type, trigger_condition, confidence, target_price, stop_loss |
+| `capitals.csv` | 每日资金状态 | date, cash, position_value, total_value, cash_ratio, daily_pnl, daily_return |
+| `positions.csv` | 每日持仓详情 | date, symbol, size, cost_price, current_price, market_value, pnl, pnl_ratio, holding_days |
+| `orders.csv` | 订单执行日志 | order_id, datetime, symbol, action, status, expected_price, executed_price, slippage, commission |
+| `summary.json` | 回测摘要 | strategy_name, params, return_pct, max_drawdown, sharpe_ratio |
+| `plot.png` | 可视化图表 | 资产曲线、回撤曲线、收益分布、绩效摘要 |
+
+### 日志文件字段详解
+
+#### signals.csv - 交易信号日志
+
+记录策略产生的所有交易信号，用于信号分析和策略优化。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `datetime` | datetime | 信号产生时间 |
+| `symbol` | str | 标的代码 |
+| `signal_type` | str | 信号类型: buy / sell |
+| `trigger_condition` | str | 触发条件描述 |
+| `indicator_values` | dict | 指标值快照 (JSON) |
+| `confidence` | float | 信号强度 (0-1) |
+| `target_price` | float | 目标价格 |
+| `stop_loss` | float | 止损价 |
+| `take_profit` | float | 止盈价 |
+
+#### capitals.csv - 每日资金状态
+
+记录每日资金变化，用于资金曲线分析和风险监控。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `date` | date | 日期 |
+| `cash` | float | 可用现金 |
+| `position_value` | float | 持仓市值 |
+| `total_value` | float | 总资产 |
+| `cash_ratio` | float | 现金比例 |
+| `position_ratio` | float | 持仓比例 |
+| `daily_pnl` | float | 当日盈亏 |
+| `daily_return` | float | 当日收益率 |
+
+#### positions.csv - 每日持仓详情
+
+记录每日持仓状态，用于持仓分析和绩效归因。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `date` | date | 日期 |
+| `symbol` | str | 标的代码 |
+| `size` | int | 持仓数量 |
+| `cost_price` | float | 成本价 |
+| `current_price` | float | 当前价 |
+| `market_value` | float | 市值 |
+| `pnl` | float | 浮动盈亏 |
+| `pnl_ratio` | float | 盈亏比例 |
+| `holding_days` | int | 持仓天数 |
+| `weight` | float | 权重 |
+
+#### orders.csv - 订单执行日志
+
+记录订单提交和执行过程，用于滑点分析和执行效率评估。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `order_id` | str | 订单ID |
+| `datetime` | datetime | 订单时间 |
+| `symbol` | str | 标的代码 |
+| `action` | str | 买卖方向: buy / sell |
+| `order_type` | str | 订单类型: market / limit |
+| `expected_price` | float | 预期价格 |
+| `expected_size` | int | 预期数量 |
+| `status` | str | 状态: submitted / completed / canceled / rejected |
+| `executed_price` | float | 成交价格 |
+| `executed_size` | int | 成交数量 |
+| `slippage` | float | 滑点 |
+| `commission` | float | 手续费 |
+| `message` | str | 状态消息 |
 
 ## 模块结构
 
@@ -162,6 +267,7 @@ backtest/
 ├── broker.py            # A股 Broker 配置
 ├── account.py           # 独立账户封装
 ├── results.py           # 回测结果和绩效指标
+├── trade_logger.py      # 完整交易日志记录器
 └── strategy/
     ├── __init__.py
     ├── base.py          # 策略基类
@@ -185,6 +291,9 @@ class MyStrategy(BaseStrategy):
         # 初始化指标
 
     def next(self):
+        # 记录每日资金和持仓状态
+        self._log_daily_state()
+        
         # 策略逻辑（每根K线执行）
         pass
 ```
@@ -194,10 +303,30 @@ class MyStrategy(BaseStrategy):
 | 方法 | 说明 |
 |------|------|
 | `log(txt)` | 记录日志 |
+| `log_signal(...)` | 记录交易信号 |
+| `log_daily_capital()` | 记录当日资金状态 |
+| `log_daily_positions()` | 记录当日持仓状态 |
+| `_log_daily_state()` | 记录每日资金和持仓（推荐在 next() 开头调用） |
 | `notify_order(order)` | 订单状态回调 |
 | `notify_trade(trade)` | 交易闭环回调 |
 | `can_sell_today(data)` | T+1卖出检查 |
 | `get_trades_df()` | 获取交易记录 |
+
+**log_signal 参数说明:**
+
+```python
+def log_signal(
+    signal_type: str,              # 信号类型: 'buy' / 'sell'
+    data: bt.DataBase = None,      # 数据对象，默认第一个
+    trigger_condition: str = "",   # 触发条件描述
+    indicator_values: dict = None, # 指标值快照
+    confidence: float = 1.0,       # 信号强度 (0-1)
+    target_price: float = None,    # 目标价格
+    stop_loss: float = None,       # 止损价
+    take_profit: float = None,     # 止盈价
+):
+    """记录交易信号"""
+```
 
 ### BacktestRunner - 回测运行器
 
@@ -239,6 +368,12 @@ result.win_rate         # 胜率
 result.profit_factor    # 盈亏比
 result.log_files        # 保存的日志文件路径
 
+# 日志数据（新增）
+result.signal_log       # 信号日志列表
+result.capital_log      # 资金日志列表
+result.position_log     # 持仓日志列表
+result.order_log        # 订单日志列表
+
 # 绩效指标
 result.calculate_max_drawdown()    # 最大回撤
 result.calculate_sharpe_ratio()    # 夏普比率
@@ -251,7 +386,10 @@ result.save("file.json") # 保存到文件（支持 json/csv/html）
 # 手动保存日志
 result.save_trades(output_dir, format="csv")
 result.save_daily_values(output_dir)
-result.save_summary(output_dir)
+result.save_signal_log(output_dir)      # 保存信号日志
+result.save_capital_log(output_dir)     # 保存资金日志
+result.save_position_log(output_dir)    # 保存持仓日志
+result.save_order_log(output_dir)       # 保存订单日志
 result.save_all_logs(output_dir, format="csv")
 ```
 
@@ -331,6 +469,12 @@ config = BacktestConfig(
     auto_save_trades=True,                     # 自动保存交易日志
     trade_log_format="csv",                    # 日志格式（csv/json）
     auto_save_plot=True,                       # 自动保存图表
+
+    # 日志记录开关（新增）
+    enable_signal_log=True,                    # 启用信号日志
+    enable_capital_log=True,                   # 启用资金日志
+    enable_position_log=True,                  # 启用持仓日志
+    enable_order_log=True,                     # 启用订单日志
 )
 ```
 

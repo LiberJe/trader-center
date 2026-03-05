@@ -34,15 +34,39 @@ class SmaCrossStrategy(BaseStrategy):
         self.crossover = bt.indicators.CrossOver(self.sma_fast, self.sma_slow)
 
     def next(self):
-        # 无持仓时，金叉买入
+        self._log_daily_state()
+        
         if not self.position:
             if self.crossover > 0:
-                self.log(f"金叉买入，价格: {self.data.close[0]:.2f}")
+                self.log_signal(
+                    signal_type='buy',
+                    data=self.data,
+                    trigger_condition=f'SMA金叉: 快线{self.sma_fast[0]:.2f} > 慢线{self.sma_slow[0]:.2f}',
+                    indicator_values={
+                        'sma_fast': self.sma_fast[0],
+                        'sma_slow': self.sma_slow[0],
+                        'close': self.data.close[0],
+                        'crossover': self.crossover[0],
+                    },
+                    confidence=0.8,
+                    target_price=self.data.close[0] * 1.1,
+                    stop_loss=self.data.close[0] * 0.95,
+                )
                 self.buy()
-        # 有持仓时，死叉卖出
         else:
             if self.crossover < 0:
-                self.log(f"死叉卖出，价格: {self.data.close[0]:.2f}")
+                self.log_signal(
+                    signal_type='sell',
+                    data=self.data,
+                    trigger_condition=f'SMA死叉: 快线{self.sma_fast[0]:.2f} < 慢线{self.sma_slow[0]:.2f}',
+                    indicator_values={
+                        'sma_fast': self.sma_fast[0],
+                        'sma_slow': self.sma_slow[0],
+                        'close': self.data.close[0],
+                        'crossover': self.crossover[0],
+                    },
+                    confidence=0.8,
+                )
                 self.sell()
 
 
@@ -72,13 +96,35 @@ class RsiStrategy(BaseStrategy):
         self.rsi = bt.indicators.RSI(period=self.p.period)
 
     def next(self):
+        self._log_daily_state()
+        
         if not self.position:
             if self.rsi < self.p.oversold:
-                self.log(f"RSI超卖买入: {self.rsi[0]:.1f}")
+                self.log_signal(
+                    signal_type='buy',
+                    data=self.data,
+                    trigger_condition=f'RSI超卖: {self.rsi[0]:.1f} < {self.p.oversold}',
+                    indicator_values={
+                        'rsi': self.rsi[0],
+                        'close': self.data.close[0],
+                    },
+                    confidence=min(1.0, (self.p.oversold - self.rsi[0]) / self.p.oversold + 0.5),
+                    target_price=self.data.close[0] * 1.15,
+                    stop_loss=self.data.close[0] * 0.92,
+                )
                 self.buy()
         else:
             if self.rsi > self.p.overbought:
-                self.log(f"RSI超买卖出: {self.rsi[0]:.1f}")
+                self.log_signal(
+                    signal_type='sell',
+                    data=self.data,
+                    trigger_condition=f'RSI超买: {self.rsi[0]:.1f} > {self.p.overbought}',
+                    indicator_values={
+                        'rsi': self.rsi[0],
+                        'close': self.data.close[0],
+                    },
+                    confidence=min(1.0, (self.rsi[0] - self.p.overbought) / (100 - self.p.overbought) + 0.5),
+                )
                 self.sell()
 
 
@@ -97,7 +143,17 @@ class BuyAndHoldStrategy(BaseStrategy):
         self.bought = False
 
     def next(self):
+        self._log_daily_state()
+        
         if not self.bought:
-            self.log(f"买入持有: {self.data.close[0]:.2f}")
-            self.order_target_percent(target=0.99)  # 99%仓位
+            self.log_signal(
+                signal_type='buy',
+                data=self.data,
+                trigger_condition='买入持有策略初始建仓',
+                indicator_values={
+                    'close': self.data.close[0],
+                },
+                confidence=1.0,
+            )
+            self.order_target_percent(target=0.99)
             self.bought = True
