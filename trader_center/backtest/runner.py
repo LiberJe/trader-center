@@ -477,7 +477,54 @@ class BacktestRunner:
             
             plt.rcParams['axes.unicode_minus'] = False
             
-            # 创建图表
+            # 首先使用 backtrader 内置绘图（包含K线图）
+            kline_saved = False
+            if self.plot_style in ['candle', 'line', 'bar']:
+                try:
+                    self.logger.info(f"正在生成 {self.plot_style} 样式K线图...")
+                    
+                    # backtrader 绘图
+                    figs = cerebro.plot(
+                        style=self.plot_style,
+                        iplot=False,
+                        barup='red',
+                        bardown='green',
+                        volume=True,
+                        width=16,
+                        height=9,
+                        dpi=150,
+                        tight=True,
+                    )
+                    
+                    # 手动保存图表
+                    if figs:
+                        # figs是一个嵌套列表: [[fig1, fig2, ...], ...]
+                        for strategy_idx, strategy_figs in enumerate(figs):
+                            for fig_idx, fig in enumerate(strategy_figs):
+                                # 确定K线图保存路径
+                                if self.plot_file:
+                                    kline_path = self.plot_file.replace('.png', f'_kline_{strategy_idx}_{fig_idx}.png')
+                                elif self.config.auto_save_plot:
+                                    run_dir = result.get_run_dir(self.config.trade_log_dir)
+                                    if len(strategy_figs) > 1:
+                                        kline_path = str(run_dir / f"kline_{strategy_idx}_{fig_idx}.png")
+                                    else:
+                                        kline_path = str(run_dir / "kline.png")
+                                else:
+                                    kline_path = None
+                                
+                                if kline_path:
+                                    fig.savefig(kline_path, dpi=150, bbox_inches='tight')
+                                    self.logger.info(f"K线图已保存到: {kline_path}")
+                                    result.log_files[f'kline_{strategy_idx}_{fig_idx}'] = kline_path
+                                    kline_saved = True
+                                else:
+                                    self.logger.info(f"已显示 {self.plot_style} 样式K线图")
+                        
+                except Exception as e:
+                    self.logger.warning(f"backtrader K线图绘制失败: {e}")
+            
+            # 创建自定义图表（资产曲线、回撤等）
             fig = plt.figure(figsize=(14, 10))
             fig.suptitle(f'{result.strategy_name} 回测结果', fontsize=14, fontweight='bold')
             
