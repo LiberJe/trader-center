@@ -1,0 +1,23 @@
+{
+  "skill_name": "backtest-runner",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "运行SMA双均线策略回测平安银行(000001.SZ)2024年全年的数据，初始资金10万元",
+      "expected_output": "执行回测并显示收益率、交易次数、最大回撤等指标，同时保存交易日志",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "用RSI策略测试贵州茅台(600519.SH)从2024年1月到6月的表现，启用QuantStats生成绩效报告",
+      "expected_output": "执行RSI回测，生成包含夏普比率、Sortino比率等指标的HTML报告",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "对比买入持有策略和SMA交叉策略在五粮液(000858.SZ)上的表现，时间范围2024年全年，保存结果为JSON文件",
+      "expected_output": "同时运行两个策略，输出对比结果并保存到JSON文件",
+      "files": []
+    }
+  ]
+}
