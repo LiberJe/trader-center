@@ -182,7 +182,8 @@ logs/
 | `positions.csv` | 每日持仓详情 | date, symbol, size, cost_price, current_price, market_value, pnl, pnl_ratio, holding_days |
 | `orders.csv` | 订单执行日志 | order_id, datetime, symbol, action, status, expected_price, executed_price, slippage, commission |
 | `summary.json` | 回测摘要 | strategy_name, params, return_pct, max_drawdown, sharpe_ratio |
-| `plot.png` | 可视化图表 | 资产曲线、回撤曲线、收益分布、绩效摘要 |
+| `kline.png` | K线图（启用可视化时） | OHLC蜡烛图、成交量、买卖信号标记 |
+| `plot.png` | 绩效图表 | 资产曲线、回撤曲线、收益分布、绩效摘要 |
 
 ### 日志文件字段详解
 
@@ -484,6 +485,62 @@ config = BacktestConfig(
 )
 ```
 
+## 可视化功能
+
+回测模块支持两种可视化图表：
+
+### 1. K线图（Candlestick Chart）
+
+使用 backtrader 内置绘图功能，自动生成专业的K线图：
+
+- **OHLC蜡烛图**：显示开盘、最高、最低、收盘价
+- **成交量柱状图**：显示每日成交量
+- **买卖信号标记**：自动标记策略的买卖点
+- **指标叠加**：显示策略使用的指标线
+
+**支持样式**：
+- `candle`：蜡烛图（默认）
+- `line`：折线图
+- `bar`：柱状图
+
+**使用方式**：
+
+```python
+# Python API
+from trader_center.backtest import BacktestRunner, BacktestConfig
+
+config = BacktestConfig(auto_save_plot=True)
+runner = BacktestRunner(
+    config=config,
+    enable_plot=True,
+    plot_style="candle"  # 或 "line", "bar"
+)
+result = runner.run(...)
+
+# K线图保存到 logs/backtest/{strategy}/{run_id}/kline.png
+```
+
+```bash
+# 命令行
+python -m trader_center.backtest \
+    -s trader_center.backtest.strategy.examples.SmaCrossStrategy \
+    -sym 000001.SZ \
+    -f 2024-01-01 -t 2024-12-31 \
+    --plot \
+    --plot-style candle
+```
+
+### 2. 绩效图表（Performance Chart）
+
+自定义绘制的绩效分析图表：
+
+- **资产曲线**：显示资产价值随时间的变化
+- **回撤曲线**：显示最大回撤的变化
+- **收益分布**：显示盈利和亏损的分布直方图
+- **绩效摘要**：显示关键绩效指标
+
+**自动生成**：当启用 `auto_save_plot=True` 时自动生成并保存到 `plot.png`。
+
 ## 绩效分析
 
 ### QuantStats 集成
@@ -609,8 +666,8 @@ python -m trader_center.backtest [选项]
   --log-format        日志格式（csv/json，默认csv）
 
   可视化选项:
-  -p, --plot          显示可视化图表
-  --plot-style        图表样式（candle/line/bar，默认candle）
+  -p, --plot          启用可视化图表（包括K线图和资产曲线）
+  --plot-style        K线图样式（candle/line/bar，默认candle）
   --plot-file         保存图表到指定文件（覆盖自动保存）
   --no-auto-save-plot 禁用自动保存图表
 
