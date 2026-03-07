@@ -160,12 +160,9 @@ class PerformanceAnalytics:
                     aligned_returns = self.returns.reindex(aligned_benchmark.index)
                     
                     if len(aligned_returns) > 0:
-                        metrics['alpha'] = float(qs.stats.alpha(
-                            aligned_returns, aligned_benchmark, periods=periods
-                        ))
-                        metrics['beta'] = float(qs.stats.beta(
-                            aligned_returns, aligned_benchmark
-                        ))
+                        greeks = qs.stats.greeks(aligned_returns, aligned_benchmark, periods=periods)
+                        metrics['alpha'] = float(greeks['alpha'])
+                        metrics['beta'] = float(greeks['beta'])
                         metrics['r_squared'] = float(qs.stats.r_squared(
                             aligned_returns, aligned_benchmark
                         ))
@@ -462,6 +459,17 @@ def load_benchmark_returns(
         if df.empty:
             logger.warning(f"无法加载基准数据: {symbol}")
             return None
+        
+        if not isinstance(df.index, pd.DatetimeIndex):
+            if 'timestamp' in df.columns:
+                df['timestamp'] = pd.to_datetime(df['timestamp'])
+                df = df.set_index('timestamp')
+            elif 'date' in df.columns:
+                df['date'] = pd.to_datetime(df['date'])
+                df = df.set_index('date')
+            elif 'trade_date' in df.columns:
+                df['trade_date'] = pd.to_datetime(df['trade_date'])
+                df = df.set_index('trade_date')
         
         df = df.sort_index()
         returns = df['close'].pct_change().dropna()
