@@ -475,10 +475,120 @@ config = BacktestConfig(
     enable_capital_log=True,                   # 启用资金日志
     enable_position_log=True,                  # 启用持仓日志
     enable_order_log=True,                     # 启用订单日志
+
+    # 绩效分析配置（新增）
+    enable_quantstats=True,                    # 启用 QuantStats 绩效分析
+    benchmark_symbol="000300.SH",              # 默认基准（沪深300）
+    auto_save_report=True,                     # 自动保存 HTML 报告
+    auto_open_report=False,                    # 回测完成后自动打开浏览器展示报告
 )
 ```
 
-## CLI 参数
+## 绩效分析
+
+### QuantStats 集成
+
+回测模块集成了 [QuantStats](https://github.com/ranaroussi/quantstats) 库，提供专业级绩效分析能力。
+
+#### 安装依赖
+
+```bash
+pip install trader-center[backtest]
+```
+
+#### 使用方式
+
+**方式一：自动生成报告**
+
+回测完成后自动生成 HTML 报告：
+
+```python
+from trader_center.backtest import BacktestRunner, BacktestConfig
+
+config = BacktestConfig(
+    enable_quantstats=True,
+    benchmark_symbol="000300.SH",  # 沪深300作为基准
+    auto_save_report=True,
+)
+
+runner = BacktestRunner(config=config)
+result = runner.run(...)
+
+# 报告自动保存到 logs/backtest/{strategy}/{run_id}/performance_report.html
+```
+
+**方式二：手动生成报告**
+
+```python
+from trader_center.backtest import PerformanceAnalytics
+import pandas as pd
+
+# 从收益率序列创建分析器
+returns = pd.Series([0.01, -0.02, 0.03], 
+                    index=pd.date_range('2024-01-01', periods=3))
+analytics = PerformanceAnalytics(returns)
+
+# 获取绩效指标
+metrics = analytics.metrics()
+print(f"夏普比率: {metrics['sharpe']:.2f}")
+print(f"Sortino比率: {metrics['sortino']:.2f}")
+
+# 生成 HTML 报告
+analytics.report('report.html', title='My Strategy')
+```
+
+**方式三：从 BacktestResult 生成**
+
+```python
+result = runner.run(...)
+
+# 获取扩展绩效指标
+metrics = result.get_extended_metrics()
+
+# 生成完整报告
+result.generate_performance_report(
+    output_dir='./reports',
+    benchmark='000300.SH',
+    title='策略绩效报告'
+)
+```
+
+#### 支持的绩效指标
+
+| 类别 | 指标 | 说明 |
+|------|------|------|
+| **收益指标** | Total Return | 总收益 |
+| | CAGR | 年化复合增长率 |
+| | Expected Return | 预期收益 |
+| **风险指标** | Volatility | 年化波动率 |
+| | Max Drawdown | 最大回撤 |
+| | VaR (95%) | 风险价值 |
+| | CVaR (95%) | 条件风险价值 |
+| | Downside Deviation | 下行偏差 |
+| **风险调整收益** | Sharpe Ratio | 夏普比率 |
+| | Sortino Ratio | 索提诺比率 |
+| | Calmar Ratio | 卡尔马比率 |
+| | Omega Ratio | 欧米伽比率 |
+| | Tail Ratio | 尾部比率 |
+| **基准对比** | Alpha | 超额收益 |
+| | Beta | 系统性风险暴露 |
+| | Information Ratio | 信息比率 |
+| | R-Squared | 拟合优度 |
+
+#### HTML 报告内容
+
+QuantStats 生成的 HTML 报告包含：
+
+- 收益曲线与基准对比
+- 回撤分析图
+- 月度收益热力图
+- 年度收益统计
+- 滚动夏普比率
+- 滚动波动率
+- 收益分布直方图
+- 完整绩效指标表格
+
+### CLI 参数
 
 ```
 python -m trader_center.backtest [选项]
@@ -503,14 +613,24 @@ python -m trader_center.backtest [选项]
   --plot-style        图表样式（candle/line/bar，默认candle）
   --plot-file         保存图表到指定文件（覆盖自动保存）
   --no-auto-save-plot 禁用自动保存图表
+
+  绩效分析选项:
+  -b, --benchmark     基准指数代码（默认沪深300: 000300.SH）
+  --no-quantstats     禁用 QuantStats 绩效分析
+  --no-report         禁用自动保存 HTML 绩效报告
+  --open-report       回测完成后自动打开浏览器展示绩效报告
 ```
 
 ## 依赖
 
+### 核心依赖
 - backtrader
 - pandas
-- matplotlib（可视化）
 - DataHub 模块（自动集成）
+
+### 可选依赖
+- matplotlib（可视化）
+- quantstats（绩效分析）
 
 ## 注意事项
 

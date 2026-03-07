@@ -455,7 +455,6 @@ class BacktestResult:
             self.to_dataframe().to_csv(filepath, index=False)
 
         elif filepath.endswith('.html'):
-            # 生成简单的 HTML 报告
             html = f"""
             <html>
             <head><title>{self.strategy_name} Backtest Result</title></head>
@@ -467,3 +466,133 @@ class BacktestResult:
             """
             with open(filepath, 'w') as f:
                 f.write(html)
+
+    def get_returns_series(self) -> pd.Series:
+        """
+        获取日收益率序列
+        
+        Returns:
+            pd.Series: 日收益率序列，index 为日期
+        """
+        from trader_center.backtest.analytics import create_returns_series
+        
+        if not self.daily_values:
+            return pd.Series(dtype=float)
+        
+        return create_returns_series(self.daily_values)
+
+    def get_extended_metrics(self, periods: int = 252) -> Dict[str, Any]:
+        """
+        获取扩展绩效指标
+        
+        Args:
+            periods: 年化交易日数（默认252）
+            
+        Returns:
+            扩展绩效指标字典，包含 Sortino、Calmar、Omega 等
+        """
+        from trader_center.backtest.analytics import PerformanceAnalytics
+        
+        if not self.daily_values or len(self.daily_values) < 2:
+            return {}
+        
+        returns = self.get_returns_series()
+        if returns.empty:
+            return {}
+        
+        analytics = PerformanceAnalytics(returns)
+        return analytics.metrics(periods)
+
+    def generate_performance_report(
+        self,
+        output_dir: Optional[Path] = None,
+        benchmark: Optional[str] = None,
+        title: Optional[str] = None
+    ) -> Optional[str]:
+        """
+        生成完整绩效分析报告
+        
+        Args:
+            output_dir: 输出目录
+            benchmark: 基准代码（如 "000300.SH" 沪深300）
+            title: 报告标题
+            
+        Returns:
+            报告文件路径
+        """
+        from trader_center.backtest.analytics import (
+            PerformanceAnalytics, 
+            create_returns_series,
+            load_benchmark_returns
+        )
+        
+        if not self.daily_values or len(self.daily_values) < 2:
+            return None
+        
+        returns = self.get_returns_series()
+        if returns.empty:
+            return None
+        
+        benchmark_returns = None
+        if benchmark:
+            try:
+                benchmark_returns = load_benchmark_returns(
+                    benchmark,
+                    self.start_date,
+                    self.end_date
+                )
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"加载基准数据失败: {e}")
+        
+        analytics = PerformanceAnalytics(returns, benchmark_returns)
+        
+        if output_dir is None:
+            output_dir = Path.cwd() / "logs" / "backtest"
+        
+        run_dir = self.get_run_dir(output_dir)
+        
+        if title is None:
+            title = f"{self.strategy_name} Performance Report"
+        
+        benchmark_name = benchmark if benchmark else "Benchmark"
+        report_path = analytics.report(
+            output_path=run_dir / "performance_report.html",
+            title=title,
+            benchmark_name=benchmark_name
+        )
+        
+        metrics = analytics.metrics()
+        if metrics:
+            metrics_path = run_dir / "metrics.json"
+            with open(metrics_path, 'w', encoding='utf-8') as f:
+                json.dump(metrics, f, indent=2, default=str, ensure_ascii=False)
+            self.log_files['metrics'] = str(metrics_path)
+        
+        if report_path:
+            self.log_files['performance_report'] = report_path
+        
+        return report_path
+
+    def save_metrics(self, output_dir: Path) -> Optional[Path]:
+        """
+        保存绩效指标到 JSON 文件
+        
+        Args:
+            output_dir: 输出目录
+            
+        Returns:
+            保存的文件路径
+        """
+        metrics = self.get_extended_metrics()
+        if not metrics:
+            return None
+        
+        run_dir = self.get_run_dir(output_dir)
+        filepath = run_dir / "metrics.json"
+        
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(metrics, f, indent=2, default=str, ensure_ascii=False)
+        
+        self.log_files['metrics'] = str(filepath)
+        return filepath

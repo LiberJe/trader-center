@@ -25,6 +25,9 @@ def __getattr__(name):
     if name == "TradeLogger":
         from .trade_logger import TradeLogger
         return TradeLogger
+    if name == "PerformanceAnalytics":
+        from .analytics import PerformanceAnalytics
+        return PerformanceAnalytics
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -34,4 +37,5 @@ __all__ = [
     "BacktestResult",
     "BacktestConfig",
     "TradeLogger",
+    "PerformanceAnalytics",
 ]

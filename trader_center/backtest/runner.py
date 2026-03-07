@@ -298,6 +298,25 @@ class BacktestRunner:
                 except Exception as e:
                     self.logger.warning(f"保存交易日志失败: {e}")
 
+            if self.config.enable_quantstats and self.config.auto_save_report:
+                try:
+                    report_path = result.generate_performance_report(
+                        output_dir=self.config.trade_log_dir,
+                        benchmark=self.config.benchmark_symbol,
+                        title=f"{strategy_name} Performance Report"
+                    )
+                    if report_path:
+                        self.logger.info(f"绩效报告已保存: {report_path}")
+                        
+                        if self.config.auto_open_report:
+                            import webbrowser
+                            from pathlib import Path
+                            abs_path = Path(report_path).absolute()
+                            webbrowser.open(f'file:///{abs_path}')
+                            self.logger.info(f"已在浏览器中打开绩效报告")
+                except Exception as e:
+                    self.logger.warning(f"生成绩效报告失败: {e}")
+
             if self.enable_plot:
                 self._plot_result(cerebro, strat, result)
 

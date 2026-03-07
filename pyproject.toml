@@ -17,3 +17,7 @@ dev = [
     "black",
     "ruff",
 ]
+backtest = [
+    "quantstats>=0.0.62",
+    "matplotlib>=3.5",
+]

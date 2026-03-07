@@ -30,6 +30,10 @@ class BacktestConfig:
         enable_capital_log: 是否启用资金日志
         enable_position_log: 是否启用持仓日志
         enable_order_log: 是否启用订单日志
+        enable_quantstats: 是否启用 QuantStats 绩效分析
+        benchmark_symbol: 默认基准代码（沪深300）
+        auto_save_report: 是否自动保存 HTML 报告
+        auto_open_report: 回测完成后是否自动打开浏览器展示报告
     """
 
     initial_cash: float = 100000.0
@@ -55,6 +59,11 @@ class BacktestConfig:
     enable_position_log: bool = True
     enable_order_log: bool = True
 
+    enable_quantstats: bool = True
+    benchmark_symbol: str = "000300.SH"
+    auto_save_report: bool = True
+    auto_open_report: bool = False
+
     def __post_init__(self):
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.trade_log_dir.mkdir(parents=True, exist_ok=True)
@@ -78,6 +87,10 @@ class BacktestConfig:
             'enable_capital_log': self.enable_capital_log,
             'enable_position_log': self.enable_position_log,
             'enable_order_log': self.enable_order_log,
+            'enable_quantstats': self.enable_quantstats,
+            'benchmark_symbol': self.benchmark_symbol,
+            'auto_save_report': self.auto_save_report,
+            'auto_open_report': self.auto_open_report,
         }
 
     @classmethod

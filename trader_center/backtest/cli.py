@@ -117,6 +117,30 @@ def create_parser() -> argparse.ArgumentParser:
         help='禁用自动保存图表（启用可视化时）'
     )
 
+    parser.add_argument(
+        '--benchmark', '-b',
+        default='000300.SH',
+        help='基准指数代码（默认沪深300: 000300.SH）'
+    )
+
+    parser.add_argument(
+        '--no-quantstats',
+        action='store_true',
+        help='禁用 QuantStats 绩效分析'
+    )
+
+    parser.add_argument(
+        '--no-report',
+        action='store_true',
+        help='禁用自动保存 HTML 绩效报告'
+    )
+
+    parser.add_argument(
+        '--open-report',
+        action='store_true',
+        help='回测完成后自动打开浏览器展示绩效报告'
+    )
+
     return parser
 
 
@@ -160,6 +184,10 @@ def main(args: Optional[list] = None) -> int:
             auto_save_trades=not parsed.no_auto_save,
             trade_log_format=parsed.log_format,
             auto_save_plot=not parsed.no_auto_save_plot,
+            enable_quantstats=not parsed.no_quantstats,
+            benchmark_symbol=parsed.benchmark,
+            auto_save_report=not parsed.no_report,
+            auto_open_report=parsed.open_report,
         )
         if parsed.log_dir:
             config.trade_log_dir = Path(parsed.log_dir)
@@ -238,6 +266,22 @@ def print_result(result, verbose: bool = False):
     sharpe = result.calculate_sharpe_ratio()
     print(f"  最大回撤: {max_dd:.2%}")
     print(f"  夏普比率: {sharpe:.2f}")
+    
+    extended_metrics = result.get_extended_metrics()
+    if extended_metrics:
+        print("\n【扩展绩效指标】")
+        if 'sortino' in extended_metrics:
+            print(f"  Sortino比率: {extended_metrics['sortino']:.2f}")
+        if 'calmar' in extended_metrics:
+            print(f"  Calmar比率:  {extended_metrics['calmar']:.2f}")
+        if 'volatility' in extended_metrics:
+            print(f"  年化波动率:  {extended_metrics['volatility']:.2%}")
+        if 'cagr' in extended_metrics:
+            print(f"  年化收益:    {extended_metrics['cagr']:.2%}")
+        if 'omega' in extended_metrics and extended_metrics['omega']:
+            print(f"  Omega比率:   {extended_metrics['omega']:.2f}")
+        if 'var_95' in extended_metrics and extended_metrics['var_95']:
+            print(f"  VaR(95%):    {extended_metrics['var_95']:.2%}")
     
     print("\n【交易统计】")
     print(f"  总交易次数: {result.total_trades}")
