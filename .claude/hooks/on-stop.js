@@ -18,6 +18,7 @@ const { exec } = require('child_process');
 const CONFIG_PATH = path.join(__dirname, '..', 'tmp', 'strategy-loop', 'strategy-goals.json');
 const STATE_PATH = path.join(__dirname, '..', 'tmp', 'strategy-loop', 'state.json');
 const FLAG_PATH = path.join(__dirname, '..', 'tmp', 'strategy-loop', 'flag.json');
+const LOOP_FLAG_PATH = path.join(__dirname, '..', 'loop.flag');
 const BACKTEST_BASE_DIR = path.join(__dirname, '..', '..', 'logs', 'backtest');
 
 /**
@@ -320,7 +321,16 @@ function outputPrompt({ decision, reason, systemMessage }) {
  * 主函数
  */
 async function main() {
-  // 1. 删除旧的状态文件，确保每次检查都基于最新回测结果
+  // 1. 检查 loop.flag 文件是否存在，不存在则直接退出
+  if (!fs.existsSync(LOOP_FLAG_PATH)) {
+    return outputPrompt({
+      decision: "approve",
+      reason: "Loop flag not found",
+      systemMessage: "Loop 模式未启动，直接退出。"
+    });
+  }
+
+  // 2. 删除旧的状态文件，确保每次检查都基于最新回测结果
   try {
     if (fs.existsSync(STATE_PATH)) {
       fs.unlinkSync(STATE_PATH);
@@ -329,7 +339,7 @@ async function main() {
     console.error('删除旧状态文件失败:', error.message);
   }
 
-  // 2. 加载配置
+  // 3. 加载配置
   const config = loadConfig();
   if (!config) {
     return outputPrompt({
