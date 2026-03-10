@@ -1,0 +1,12 @@
+{
+  "last_check": "2026-03-09T17:28:52.501Z",
+  "strategy": "equal_weight_asset_allocation",
+  "run_id": "20260307_231737_40c37e",
+  "achieved": false,
+  "metrics": {
+    "total_return": 0.27368122593999744,
+    "max_drawdown": -0.06689614782340125,
+    "sharpe": 1.7074194011136834
+  },
+  "iteration": 0
+}

@@ -4,10 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Trader Center is a quantitative trading framework with two main modules:
+Trader Center is a quantitative trading framework with three main modules:
 
 1. **DataHub** (`trader_center/data_hub/`): Data fetching and storage system for A-share market data
 2. **Monitor** (`trader_center/monitor/`): CLI tool for executing market observation tasks
+3. **Backtest** (`trader_center/backtest/`): Quantitative backtesting system based on backtrader
 
 ## Common Commands
 
@@ -150,3 +151,67 @@ class DummyTask(BaseTask):
 ### Test Organization
 - `tests/monitor/`: CLI, task router, base task tests
 - `tests/data_hub/`: Models, storage, fetchers, integration tests
+- `tests/backtest/`: Backtest engine, strategies, analytics tests
+
+## Backtest Module
+
+**Execution Flow**: `CLI`/`API` → `BacktestRunner` → `Strategy` → `BacktestResult`
+
+- **BacktestRunner** (`backtest/runner.py`): Core engine using backtrader. Supports single/multi-strategy backtests, parallel execution.
+- **BaseStrategy** (`backtest/strategy/base.py`): Abstract base class for all strategies. Includes trade logging, signal tracking, position management.
+- **Example Strategies** (`backtest/strategy/examples.py`): Built-in strategies - SmaCrossStrategy, RsiStrategy, BuyAndHoldStrategy.
+- **BacktestResult** (`backtest/results.py`): Results container with performance metrics, trade logs, export methods.
+- **TradeLogger** (`backtest/trade_logger.py`): Comprehensive logging for signals, capital, positions, orders.
+- **Performance Analytics** (`backtest/analytics.py`): QuantStats integration for professional performance reports.
+
+**Key Features**:
+- A-share trading rules: commission (0.025%), stamp duty (0.1%), price limits, T+1 settlement
+- Automatic trade logs saved to `logs/backtest/{strategy}/{timestamp}/`
+- Performance metrics: returns, max drawdown, Sharpe ratio, Sortino ratio, etc.
+- HTML reports with QuantStats integration
+
+### Backtest CLI Examples
+```bash
+# SMA crossover strategy
+python -m trader_center.backtest \
+    --strategy trader_center.backtest.strategy.examples.SmaCrossStrategy \
+    --symbol 000001.SZ \
+    --start 2024-01-01 --end 2024-12-31 \
+    --cash 100000 --plot
+
+# RSI strategy with performance report
+python -m trader_center.backtest \
+    -s trader_center.backtest.strategy.examples.RsiStrategy \
+    -sym 600519.SH \
+    -f 2024-01-01 -t 2024-06-30 \
+    --open-report
+```
+
+### Backtest Python API
+```python
+from trader_center.backtest import BacktestRunner, BacktestConfig
+from trader_center.backtest.strategy.examples import SmaCrossStrategy
+
+config = BacktestConfig(
+    auto_save_trades=True,
+    enable_quantstats=True,
+    auto_save_report=True
+)
+runner = BacktestRunner(config=config)
+result = runner.run(
+    strategy=SmaCrossStrategy,
+    symbols=["000001.SZ"],
+    start="2024-01-01",
+    end="2024-12-31",
+    initial_cash=100000
+)
+print(f"Return: {result.return_pct:.2%}")
+```
+
+## Claude Skills
+
+This project includes custom Claude Skills in `.claude/skills/`:
+
+- **backtest-runner**: Execute quantitative backtesting using the backtest module
+  - Usage: "运行SMA策略回测平安银行2024年数据"
+  - Supports all built-in strategies and custom strategy execution

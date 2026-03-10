@@ -5,12 +5,25 @@
   "permissions": {
     "defaultMode": "bypassPermissions"
   },
-  "enabledPlugins": {
-    "superpowers@claude-plugins-official": true,
-    "ralph-loop@claude-plugins-official": true
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/on-stop.js"
+          }
+        ]
+      }
+    ]
   },
   "statusLine": {
     "type": "command",
     "command": "npx -y @owloops/claude-powerline@latest --style=powerline"
+  },
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true,
+    "ralph-loop@claude-plugins-official": true
   }
 }

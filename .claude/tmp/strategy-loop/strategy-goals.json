@@ -1,0 +1,11 @@
+{
+  "target_strategy": "equal_weight_asset_allocation",
+  "goals": {
+    "total_return": { "min": 0.20, "max": null },
+    "max_drawdown": { "min": null, "max": -0.05 },
+    "sharpe": { "min": 1.0, "max": null }
+  },
+  "check_latest_n": 1,
+  "open_report_on_success": true,
+  "max_iterations": 10
+}
