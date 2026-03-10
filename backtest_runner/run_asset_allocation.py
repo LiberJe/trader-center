@@ -47,7 +47,7 @@ def main():
     result = runner.run(
         strategy=EqualWeightAssetAllocation,
         symbols=symbols,
-        start="2023-01-01",
+        start="2020-01-01",
         end="2024-12-31",
         initial_cash=config.initial_cash,
         strategy_params={
