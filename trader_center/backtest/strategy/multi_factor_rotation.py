@@ -42,6 +42,7 @@ class MultiFactorRotationStrategy(BaseStrategy):
         factor_configs: 因子配置字典
         min_score: 最低得分阈值，低于此值的资产不持有
         lookback: 因子计算的历史数据长度
+        exec_type: 订单执行类型，'open'为次日开盘价，'close'为次日收盘价
     """
     
     name = "multi_factor_rotation"
@@ -53,6 +54,7 @@ class MultiFactorRotationStrategy(BaseStrategy):
         ('factor_configs', None),
         ('min_score', -np.inf),
         ('lookback', 60),
+        ('exec_type', 'open'),
     )
     
     def __init__(self):
@@ -77,6 +79,23 @@ class MultiFactorRotationStrategy(BaseStrategy):
         
         self.log(f"策略初始化: 资产数量={len(self.datas)}, 持仓数量={self.p.top_n}")
         self.log(f"因子配置: {list(self.scorer.factor_configs.keys())}")
+        self.log(f"订单执行类型: {self.p.exec_type} ({'次日开盘价' if self.p.exec_type == 'open' else '次日收盘价'})")
+    
+    def _order_target_percent(self, data, target: float):
+        """
+        下单调整仓位到目标百分比
+        
+        Args:
+            data: 数据对象
+            target: 目标仓位百分比 (0.0 ~ 1.0)
+        
+        Returns:
+            订单对象
+        """
+        if self.p.exec_type == 'close':
+            return self.order_target_percent(data=data, target=target, exectype=bt.Order.Close)
+        else:
+            return self.order_target_percent(data=data, target=target)
     
     def prenext(self):
         """预热期 - 缓存数据"""
@@ -243,11 +262,11 @@ class MultiFactorRotationStrategy(BaseStrategy):
             symbol = data._name if hasattr(data, '_name') else 'unknown'
             
             if symbol in selected:
-                self.order_target_percent(data=data, target=weight_per_asset)
+                self._order_target_percent(data=data, target=weight_per_asset)
             else:
                 position = self.getposition(data)
                 if position.size > 0:
-                    self.order_target_percent(data=data, target=0)
+                    self._order_target_percent(data=data, target=0)
         
         self.log(f"初始建仓完成，选中 {len(selected)} 个资产，每个权重 {weight_per_asset:.2%}")
     
@@ -270,7 +289,7 @@ class MultiFactorRotationStrategy(BaseStrategy):
             for data in self.datas:
                 position = self.getposition(data)
                 if position.size > 0:
-                    self.order_target_percent(data=data, target=0)
+                    self._order_target_percent(data=data, target=0)
             return
         
         weight_per_asset = 0.95 / len(selected)
@@ -318,7 +337,7 @@ class MultiFactorRotationStrategy(BaseStrategy):
                     confidence=min(1.0, (score + 2) / 4) if score else 0.5,
                 )
                 
-                self.order_target_percent(data=data, target=target_weight)
+                self._order_target_percent(data=data, target=target_weight)
         
         self.log("再平衡执行完成")
         

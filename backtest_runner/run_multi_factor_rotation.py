@@ -77,6 +77,7 @@ def main():
     print(f"  再平衡频率: 20个交易日")
     print(f"  持仓数量: 3")
     print(f"  因子计算窗口: 60天")
+    print(f"  订单执行: 次日收盘价 (exec_type='close')")
     
     print("\n开始回测...")
     
@@ -91,6 +92,7 @@ def main():
             'top_n': 3,
             'factor_configs': factor_configs,
             'lookback': 60,
+            'exec_type': 'close',
         }
     )
     
