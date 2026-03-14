@@ -1,0 +1,33 @@
+{
+  "title": "因子评价报告: gp_factor_43ffc5d4",
+  "generated_at": "2026-03-12T01:37:13.787470",
+  "factor_shape": [
+    100,
+    5
+  ],
+  "prices_shape": [
+    100,
+    5
+  ],
+  "quantiles": 5,
+  "periods": [
+    1,
+    5,
+    10,
+    20
+  ],
+  "factor_data_shape": [
+    395,
+    6
+  ],
+  "stats": {
+    "mean_factor_return": -0.0032107364892530986,
+    "factor_sharpe": -0.17736831893787644,
+    "ic_mean": -0.03006329113924051,
+    "icir": -0.09764218795683163,
+    "ic_positive_ratio": 0.46835443037974683,
+    "alpha": -0.3485114694519089,
+    "beta": 0.06311040461124579
+  },
+  "chart_dir": "./reports\\charts_20260312_013833"
+}
