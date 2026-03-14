@@ -21,3 +21,7 @@ backtest = [
     "quantstats>=0.0.62",
     "matplotlib>=3.5",
 ]
+
+[tool.setuptools.packages.find]
+include = ["trader_center*"]
+exclude = ["logs*", "backtest_runner*", "tests*"]

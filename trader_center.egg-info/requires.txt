@@ -4,6 +4,10 @@ akshare>=1.15
 pyarrow>=15.0
 backtrader>=1.9.78
 
+[backtest]
+quantstats>=0.0.62
+matplotlib>=3.5
+
 [dev]
 pytest>=8.0
 pytest-cov

@@ -1,0 +1,30 @@
+{
+  "assets": {
+    "518880.SH": {
+      "name": "黄金ETF",
+      "category": "commodity"
+    },
+    "510300.SH": {
+      "name": "沪深300ETF",
+      "category": "equity_cn"
+    },
+    "513100.SH": {
+      "name": "纳指ETF",
+      "category": "equity_us"
+    },
+    "511010.SH": {
+      "name": "国债ETF",
+      "category": "bond"
+    },
+    "159981.SZ": {
+      "name": "能源化工ETF",
+      "category": "commodity"
+    }
+  },
+  "strategy_params": {
+    "rebalance_freq": 20,
+    "top_n": 3,
+    "lookback": 60,
+    "exec_type": "close"
+  }
+}

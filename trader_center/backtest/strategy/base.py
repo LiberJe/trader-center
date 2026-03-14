@@ -49,9 +49,9 @@ class BaseStrategy(bt.Strategy):
     # backtrader params
     params = ()
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         """初始化策略"""
-        super().__init__()
+        super().__init__(*args, **kwargs)
         self.logger = logging.getLogger(f"backtest.strategy.{self.name}")
 
         self.trade_logger = TradeLogger(self.name)

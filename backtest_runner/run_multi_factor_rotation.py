@@ -2,11 +2,21 @@
 多因子轮动策略运行示例
 
 演示如何使用因子库构建多因子轮动策略并运行回测。
+支持从外部传入自定义资产配置。
 """
+
+import sys
+from pathlib import Path
+# 添加项目根目录到路径，确保使用当前开发代码而非已安装包
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
 from datetime import date
 from trader_center.backtest import BacktestRunner, BacktestConfig
-from trader_center.backtest.strategy import MultiFactorRotationStrategy, ASSET_CONFIG
+from trader_center.backtest.strategy import MultiFactorRotationStrategy
+from trader_center.backtest.strategy.multi_factor_rotation import (
+    ASSET_CONFIG
+)
 from trader_center.backtest.strategy.factor_scorer import DEFAULT_FACTOR_CONFIGS
 
 
@@ -14,7 +24,7 @@ def main():
     print("=" * 60)
     print("多因子轮动策略回测")
     print("=" * 60)
-    
+
     factor_configs = {
         'momentum': {
             'weight': 0.30,
@@ -42,19 +52,45 @@ def main():
             'params': {'period': 14},
         },
     }
-    
+
     print("\n因子配置:")
     for name, cfg in factor_configs.items():
         direction_str = "正向" if cfg['direction'] == 'positive' else "反向"
         params_str = ", ".join(f"{k}={v}" for k, v in cfg['params'].items())
         print(f"  {name} ({params_str}): 权重 {cfg['weight']:.0%}, 方向 {direction_str}")
-    
-    print("\n资产池:")
-    for symbol, info in ASSET_CONFIG.items():
-        print(f"  {info['name']} ({symbol})")
-    
-    symbols = list(ASSET_CONFIG.keys())
-    
+
+    # 方式1: 使用默认资产配置
+    # print("\n【方式1】使用默认资产池:")
+    # for symbol, info in ASSET_CONFIG.items():
+    #     print(f"  {info['name']} ({symbol})")
+
+    # ============================================================
+    # 资产配置 - 唯一配置源
+    # ============================================================
+    # 说明: 这里定义的asset_config同时用于:
+    #   1. 作为strategy_params传给策略 (资产元数据)
+    #   2. 自动生成symbols列表加载回测数据
+    # 好处: 只有一个配置源，避免symbols和asset_config不一致
+    # ============================================================
+    asset_config = {
+        '518880.SH': {'name': '黄金ETF', 'category': 'commodity'},
+        '510300.SH': {'name': '沪深300ETF', 'category': 'equity_cn'},
+        # '159915.SZ': {'name': '创业板ETF', 'category': 'equity_cn'},
+        '513100.SH': {'name': '纳指ETF', 'category': 'equity_us'},
+        '511010.SH': {'name': '国债ETF', 'category': 'bond'},
+        '159981.SZ': {'name': '能源化工ETF', 'category': 'commodity'},
+    }
+
+    # 从asset_config自动生成symbols，确保一致性
+    symbols = list(asset_config.keys())
+
+    print(f"\n资产配置 ({len(asset_config)}个资产):")
+    for symbol, info in asset_config.items():
+        print(f"  {info['name']} ({symbol}) - {info['category']}")
+
+    # ============================================================
+    # 回测配置
+    # ============================================================
     config = BacktestConfig(
         initial_cash=1000000,
         auto_save_trades=True,
@@ -64,13 +100,13 @@ def main():
         auto_save_report=True,
         auto_open_report=False,
     )
-    
+
     runner = BacktestRunner(
         config=config,
         enable_plot=True,
         plot_style="line",
     )
-    
+
     print("\n回测参数:")
     print(f"  初始资金: {config.initial_cash:,.0f} 元")
     print(f"  回测区间: 2020-01-01 ~ 2024-12-31")
@@ -78,9 +114,10 @@ def main():
     print(f"  持仓数量: 3")
     print(f"  因子计算窗口: 60天")
     print(f"  订单执行: 次日收盘价 (exec_type='close')")
-    
+
     print("\n开始回测...")
-    
+
+    # 使用默认资产配置运行
     result = runner.run(
         strategy=MultiFactorRotationStrategy,
         symbols=symbols,
@@ -93,6 +130,7 @@ def main():
             'factor_configs': factor_configs,
             'lookback': 60,
             'exec_type': 'close',
+            'asset_config': asset_config,  # 资产配置（与symbols保持一致）
         }
     )
     
