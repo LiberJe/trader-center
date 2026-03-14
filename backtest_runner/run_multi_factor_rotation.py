@@ -4,6 +4,12 @@
 演示如何使用因子库构建多因子轮动策略并运行回测。
 """
 
+import sys
+from pathlib import Path
+# 添加项目根目录到路径，确保使用当前开发代码而非已安装包
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
 from datetime import date
 from trader_center.backtest import BacktestRunner, BacktestConfig
 from trader_center.backtest.strategy import MultiFactorRotationStrategy, ASSET_CONFIG
