@@ -208,6 +208,17 @@ result = runner.run(
 print(f"Return: {result.return_pct:.2%}")
 ```
 
+## Agent 代码生成规范
+
+所有代码生成任务必须遵守 [AGENT.md](./AGENT.md) 中定义的目录结构规则。
+
+简要总结：
+- **策略**: `trader_center/backtest/strategy/{strategy-name}/`
+  - 必须包含 `index.py`（策略代码）、`config.py`（配置）、`README.md`（说明）
+  - 必须创建 `__init__.py` 导出策略
+  - 必须在父级 `__init__.py` 中导入
+- **Runner**: `./backtest_runner/`（项目根目录）
+
 ## Claude Skills
 
 This project includes custom Claude Skills in `.claude/skills/`:
@@ -215,3 +226,6 @@ This project includes custom Claude Skills in `.claude/skills/`:
 - **backtest-runner**: Execute quantitative backtesting using the backtest module
   - Usage: "运行SMA策略回测平安银行2024年数据"
   - Supports all built-in strategies and custom strategy execution
+- **strategy-generator**: Generate quantitative trading strategy code based on trader_center framework
+  - Usage: "Generate a MACD golden cross strategy"
+  - Creates strategy in `trader_center/backtest/strategy/{strategy-name}/` directory

@@ -2,6 +2,14 @@
 
 根据用户需求自动生成量化交易策略，并执行回测验证。
 
+## 代码生成目录规则
+
+**重要**: 所有策略必须按照 [AGENT.md](../../AGENT.md) 中定义的目录结构生成。
+
+- **策略路径**: `trader_center/backtest/strategy/{strategy-name}/`
+- **必须包含**: `index.py`、`config.py`、`README.md`、`__init__.py`
+- **必须更新**: `trader_center/backtest/strategy/__init__.py`
+
 ## 使用方式
 
 /gen-strategy 帮我写一个MACD策略，要求夏普比率>1.2，最大回撤<15%，回测平安银行2024年数据
@@ -10,7 +18,7 @@
 
 1. **解析目标**：提取优化目标（sharpe、max_drawdown、total_return）和回测参数
 2. **生成配置**：在 `.claude/tmp/strategy-loop/` 创建 `strategy-goals.json`
-3. **生成策略**：触发 strategy-generator skill 创建策略代码
+3. **生成策略**：触发 strategy-generator skill 创建策略目录结构
 4. **执行回测**：使用 backtest-runner 验证策略表现
 5. **结果对比**：检查是否达到优化目标
 
@@ -52,6 +60,7 @@
 
 parsed = {
     "strategy_type": "SmaCrossStrategy",  # 从"双均线"识别
+    "strategy_name": "sma_cross_strategy",  # snake_case
     "goals": {
         "sharpe": {"min": 1.0, "max": None},
         "max_drawdown": {"min": None, "max": -0.20},  # 20%回撤转为-0.20
@@ -72,7 +81,7 @@ parsed = {
 
 ```json
 {
-  "target_strategy": "sma_cross",
+  "target_strategy": "sma_cross_strategy",
   "goals": {
     "total_return": {"min": null, "max": null},
     "max_drawdown": {"min": null, "max": -0.20},
@@ -93,7 +102,15 @@ parsed = {
 - 如果用户请求"双均线策略" → 生成 SMA 交叉策略
 - 如果用户请求"RSI策略" → 生成 RSI 超买超卖策略
 
-生成策略保存到 `trader_center/backtest/strategy/generated/` 目录（如不存在则创建）。
+**生成目标**: `trader_center/backtest/strategy/{strategy-name}/` 目录
+
+**必须生成的文件**:
+- `index.py` - 策略主代码
+- `config.py` - 策略配置
+- `README.md` - 策略说明
+- `__init__.py` - 导出策略类
+
+**必须更新**: `trader_center/backtest/strategy/__init__.py` 添加新策略导入
 
 ### Step 4: 执行回测
 
@@ -101,7 +118,7 @@ parsed = {
 
 ```bash
 python -m trader_center.backtest \
-    --strategy trader_center.backtest.strategy.generated.GeneratedStrategy \
+    --strategy trader_center.backtest.strategy.{strategy_name}.{StrategyClass} \
     --symbol {symbol} \
     --start {start} \
     --end {end} \
@@ -139,11 +156,13 @@ def check_goals(results, goals):
 ```
 
 执行流程：
-1. 解析：strategy_type="MacdStrategy", sharpe>1.5, max_drawdown<-0.10
+1. 解析：strategy_type="MacdStrategy", strategy_name="macd_strategy", sharpe>1.5, max_drawdown<-0.10
 2. 生成 strategy-goals.json
-3. 调用 strategy-generator 生成 MACD 策略代码
-4. 调用 backtest-runner 执行回测
-5. 对比结果：输出是否达标
+3. 调用 strategy-generator 生成目录 `trader_center/backtest/strategy/macd_strategy/`
+4. 生成 4 个文件（index.py, config.py, README.md, __init__.py）
+5. 更新父级 `__init__.py` 导入
+6. 调用 backtest-runner 执行回测
+7. 对比结果：输出是否达标
 
 ### 示例 2：双均线策略
 
@@ -153,11 +172,13 @@ def check_goals(results, goals):
 ```
 
 执行流程：
-1. 解析：strategy_type="SmaCrossStrategy", total_return>0.20, max_drawdown<-0.15
+1. 解析：strategy_type="SmaCrossStrategy", strategy_name="sma_cross_strategy", total_return>0.20, max_drawdown<-0.15
 2. 生成 strategy-goals.json
-3. 调用 strategy-generator 生成双均线策略
-4. 调用 backtest-runner 执行回测
-5. 对比结果：输出是否达标
+3. 调用 strategy-generator 生成目录 `trader_center/backtest/strategy/sma_cross_strategy/`
+4. 生成 4 个文件（index.py, config.py, README.md, __init__.py）
+5. 更新父级 `__init__.py` 导入
+6. 调用 backtest-runner 执行回测
+7. 对比结果：输出是否达标
 
 ## 实现代码
 
@@ -204,6 +225,18 @@ STOCK_MAP = {
     "东方财富": "300059.SZ",
 }
 
+def to_snake_case(name: str) -> str:
+    """将策略类名转换为 snake_case 目录名"""
+    # 移除 Strategy 后缀
+    name = name.replace("Strategy", "")
+    # PascalCase 转 snake_case
+    result = []
+    for i, char in enumerate(name):
+        if char.isupper() and i > 0:
+            result.append("_")
+        result.append(char.lower())
+    return "".join(result) + "_strategy"
+
 def parse_strategy_input(user_input: str) -> dict:
     """解析用户输入，提取策略类型、目标和回测参数"""
     result = {
@@ -226,13 +259,13 @@ def parse_strategy_input(user_input: str) -> dict:
     for key, strategy in STRATEGY_MAP.items():
         if key in user_input:
             result["strategy_type"] = strategy
-            result["strategy_name"] = strategy.lower().replace("strategy", "")
+            result["strategy_name"] = to_snake_case(strategy)
             break
 
     # 默认策略
     if not result["strategy_type"]:
         result["strategy_type"] = "SmaCrossStrategy"
-        result["strategy_name"] = "sma_cross"
+        result["strategy_name"] = "sma_cross_strategy"
 
     # 解析夏普比率目标
     sharpe_match = re.search(r'夏普(?:比率)?[>≥](\d+(?:\.\d+)?)', user_input)
@@ -341,7 +374,7 @@ user_input = ""  # 用户输入将由 Claude 填充
 
 # 1. 解析输入
 parsed = parse_strategy_input(user_input)
-print(f"解析结果：策略={parsed['strategy_type']}, 股票={parsed['backtest_params']['symbol']}")
+print(f"解析结果：策略={parsed['strategy_type']}, 目录={parsed['strategy_name']}, 股票={parsed['backtest_params']['symbol']}")
 print(f"目标：{json.dumps(parsed['goals'], indent=2, ensure_ascii=False)}")
 
 # 2. 生成 goals 文件
@@ -350,15 +383,25 @@ print(f"已生成配置：{goals_file}")
 
 # 3. 触发策略生成（Claude 将使用 strategy-generator skill）
 strategy_request = f"""请生成一个{parsed['strategy_type']}策略代码，基于 trader_center 框架。
+
+必须遵守 AGENT.md 中的目录结构规则：
+1. 创建目录：trader_center/backtest/strategy/{parsed['strategy_name']}/
+2. 创建 index.py（策略主代码）
+3. 创建 config.py（策略配置）
+4. 创建 README.md（策略说明）
+5. 创建 __init__.py（导出策略类）
+6. 在 trader_center/backtest/strategy/__init__.py 中添加导入
+
 要求：
 - 继承 BaseStrategy
 - 包含完整的策略逻辑
 - 使用中文注释
-- 保存到 trader_center/backtest/strategy/generated/{parsed['strategy_type']}.py"""
+- 命名规范：目录={parsed['strategy_name']}, 类名={parsed['strategy_type']}"""
 
 # 4. 触发回测（Claude 将使用 backtest-runner skill）
 backtest_request = f"""请使用 backtest-runner 执行回测：
 - 策略：{parsed['strategy_type']}
+- 目录：trader_center.backtest.strategy.{parsed['strategy_name']}
 - 股票：{parsed['backtest_params']['symbol']}
 - 开始：{parsed['backtest_params']['start']}
 - 结束：{parsed['backtest_params']['end']}
@@ -368,7 +411,7 @@ backtest_request = f"""请使用 backtest-runner 执行回测：
 print("\n=== 执行流程 ===")
 print("1. 已解析用户输入")
 print("2. 已生成 strategy-goals.json")
-print("3. 请使用 strategy-generator 生成策略代码")
+print("3. 请使用 strategy-generator 生成策略目录结构")
 print("4. 请使用 backtest-runner 执行回测验证")
 ```
 
@@ -378,12 +421,16 @@ print("4. 请使用 backtest-runner 执行回测验证")
 
 1. **解析阶段**：运行解析代码，提取所有参数
 2. **生成配置**：创建 `.claude/tmp/strategy-loop/strategy-goals.json`
-3. **生成策略**：使用 `Skill: strategy-generator` 生成策略代码
-4. **执行回测**：使用 `Skill: backtest-runner` 运行回测
-5. **结果验证**：读取回测结果，与目标对比，输出结论
+3. **生成策略**：使用 `Skill: strategy-generator` 生成完整策略目录结构（4个文件）
+4. **更新导入**：在 `trader_center/backtest/strategy/__init__.py` 中添加新策略导入
+5. **执行回测**：使用 `Skill: backtest-runner` 运行回测
+6. **结果验证**：读取回测结果，与目标对比，输出结论
 
 注意：
-- 如果生成的策略文件已存在，询问用户是否覆盖
+- 策略必须生成在独立目录中，不能放在 `generated/` 下
+- 必须创建完整的 4 个文件（index.py, config.py, README.md, __init__.py）
+- 必须更新父级 `__init__.py` 导入
+- 如果策略目录已存在，询问用户是否覆盖
 - 回测完成后，根据 strategy-goals.json 中的目标检查结果
 - 达标时显示成功消息并可选择打开报告
 - 未达标时显示失败原因并建议优化方向
