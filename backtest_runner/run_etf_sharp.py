@@ -16,8 +16,8 @@ from trader_center.backtest.strategy.factor_scorer import ETF_SHARP_FACTOR_CONFI
 
 ASSET_CONFIG = {
     '518880.SH': {'name': '黄金ETF', 'category': 'commodity'},
-    # '510300.SH': {'name': '沪深300ETF', 'category': 'equity_cn'},
-    '159915.SZ': {'name': '创业板ETF', 'category': 'equity_cn'},
+    '510300.SH': {'name': '沪深300ETF', 'category': 'equity_cn'},
+    # '159915.SZ': {'name': '创业板ETF', 'category': 'equity_cn'},
     '513100.SH': {'name': '纳指ETF', 'category': 'equity_us'},
     '511010.SH': {'name': '国债ETF', 'category': 'bond'},
     '159981.SZ': {'name': '能源化工ETF', 'category': 'commodity'},
