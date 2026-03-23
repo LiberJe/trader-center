@@ -15,12 +15,28 @@ from trader_center.backtest.strategy import ETFSharpStrategy
 from trader_center.backtest.strategy.factor_scorer import ETF_SHARP_FACTOR_CONFIGS, DEFAULT_NORMALIZATION_CONFIG
 
 ASSET_CONFIG = {
-    '518880.SH': {'name': '黄金ETF', 'category': 'commodity'},
+    # 宽基指数
     '510300.SH': {'name': '沪深300ETF', 'category': 'equity_cn'},
-    # '159915.SZ': {'name': '创业板ETF', 'category': 'equity_cn'},
+    '159915.SZ': {'name': '创业板ETF', 'category': 'equity_cn'},
+
+    # 海外
     '513100.SH': {'name': '纳指ETF', 'category': 'equity_us'},
-    '511010.SH': {'name': '国债ETF', 'category': 'bond'},
+
+    # 策略
+    # '512890.SH': {'name': '红利低波ETF', 'category': 'equity_cn'},
+
+    # 行业指数
+
+
+    # 债券
+    '511010.SH': {'name': '国债ETF', 'category': 'bond'},  # 5年期国债
+    # '511260.SH': {'name': '十年国债ETF', 'category': 'bond', 'theme': '长债'},          # 10年期国债
+
+    # 商品
+    '518880.SH': {'name': '黄金ETF', 'category': 'commodity'},
     '159981.SZ': {'name': '能源化工ETF', 'category': 'commodity'},
+    # '159985.SZ': {'name': '豆粕ETF', 'category': 'commodity'},
+    # '159980.SZ': {'name': '有色ETF', 'category': 'commodity'},
 }
 
 def main():
@@ -78,7 +94,7 @@ def main():
         strategy=ETFSharpStrategy,
         symbols=symbols,
         start="2019-01-01",
-        end="2026-03-21",
+        end="2024-12-31",
         initial_cash=config.initial_cash,
         strategy_params={
             'rebalance_freq': 5,
