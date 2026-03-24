@@ -2,6 +2,7 @@
 技术因子
 
 包含动量、反转、波动率、成交量、趋势、夏普比率、回撤等技术分析因子。
+新增：技术指标、移动平均线、统计因子、价量关系因子。
 """
 
 from .momentum import (
@@ -36,8 +37,67 @@ from .drawdown import (
     UlcerIndexFactor,
     PainIndexFactor,
 )
+from .indicators import (
+    StochasticKD,
+    StochasticKSlow,
+    WilliamsR,
+    CCIFactor,
+    BollingerPosition,
+    BollingerWidth,
+    BollingerSqueeze,
+    DMIPlus,
+    DMIMinus,
+    ADXTrend,
+    SARFactor,
+    IchimokuCloud,
+    ParabolicSAR,
+    TRIXFactor,
+    UltimateOscillator,
+    AwesomeOscillator,
+    KeltnerChannel,
+    DonchianChannel,
+    ChaikinOscillator,
+    ChaikinMoneyFlow,
+)
+from .ma_extensions import (
+    WMAFactor,
+    VWMAFactor,
+    DEMAFactor,
+    TEMAFactor,
+    KAMAFactor,
+    ALMAFactor,
+    HullMAFactor,
+    ZLEMAFactor,
+)
+from .statistical import (
+    LinearRegressionSlope,
+    LinearRegressionAngle,
+    LinearRegressionIntercept,
+    RSquared,
+    CorrelationPriceVolume,
+    AutocorrelationFactor,
+    SkewnessFactor,
+    KurtosisFactor,
+    VarianceFactor,
+    StandardErrorFactor,
+    MeanAbsoluteDeviation,
+    MedianPriceFactor,
+)
+from .price_volume import (
+    EaseOfMovement,
+    ForceIndex,
+    NegativeVolumeIndex,
+    PositiveVolumeIndex,
+    VolumeRateOfChange,
+    PriceVolumeTrend,
+    TradeIntensity,
+    VolumeProfile,
+    OBVEMFactor,
+    VolumeDivergence,
+)
 
 __all__ = [
+    # 原有因子
     "MomentumFactor",
     "RSIFactor",
     "MACDFactor",
@@ -62,4 +122,58 @@ __all__ = [
     "DrawdownRecoveryFactor",
     "UlcerIndexFactor",
     "PainIndexFactor",
+    # 新增技术指标因子 (20个)
+    "StochasticKD",
+    "StochasticKSlow",
+    "WilliamsR",
+    "CCIFactor",
+    "BollingerPosition",
+    "BollingerWidth",
+    "BollingerSqueeze",
+    "DMIPlus",
+    "DMIMinus",
+    "ADXTrend",
+    "SARFactor",
+    "IchimokuCloud",
+    "ParabolicSAR",
+    "TRIXFactor",
+    "UltimateOscillator",
+    "AwesomeOscillator",
+    "KeltnerChannel",
+    "DonchianChannel",
+    "ChaikinOscillator",
+    "ChaikinMoneyFlow",
+    # 新增移动平均因子 (8个)
+    "WMAFactor",
+    "VWMAFactor",
+    "DEMAFactor",
+    "TEMAFactor",
+    "KAMAFactor",
+    "ALMAFactor",
+    "HullMAFactor",
+    "ZLEMAFactor",
+    # 新增统计因子 (12个)
+    "LinearRegressionSlope",
+    "LinearRegressionAngle",
+    "LinearRegressionIntercept",
+    "RSquared",
+    "CorrelationPriceVolume",
+    "AutocorrelationFactor",
+    "SkewnessFactor",
+    "KurtosisFactor",
+    "VarianceFactor",
+    "StandardErrorFactor",
+    "MeanAbsoluteDeviation",
+    "MedianPriceFactor",
+    # 新增价量关系因子 (10个)
+    "EaseOfMovement",
+    "ForceIndex",
+    "NegativeVolumeIndex",
+    "PositiveVolumeIndex",
+    "VolumeRateOfChange",
+    "PriceVolumeTrend",
+    "TradeIntensity",
+    "VolumeProfile",
+    "OBVEMFactor",
+    "VolumeDivergence",
 ]
