@@ -13,9 +13,23 @@ from trader_center.factor.library import FactorRegistry, register_factor
 from trader_center.factor.library.technical.momentum import MomentumFactor, RSIFactor
 from trader_center.factor.library.technical.trend import TrendStrengthFactor
 from trader_center.factor.library.technical.volatility import ATRFactor, HistoricalVolatilityFactor
+from trader_center.factor.library.technical.sharpe import SharpeRatioFactor
+from trader_center.factor.library.technical.drawdown import MaxDrawdownFactor
 
 
 logger = logging.getLogger(__name__)
+
+
+DEFAULT_NORMALIZATION_CONFIG = {
+    'winsorize': {
+        'enabled': True,
+        'lower': 0.025,
+        'upper': 0.975,
+    },
+    'standardize': {
+        'method': 'zscore',
+    },
+}
 
 
 DEFAULT_FACTOR_CONFIGS = {
@@ -47,11 +61,41 @@ DEFAULT_FACTOR_CONFIGS = {
 }
 
 
+ETF_SHARP_FACTOR_CONFIGS = {
+    'sharpe_ratio': {
+        'weight': 0.40,
+        'direction': 'positive',
+        'params': {'period': 60, 'risk_free_rate': 0.03},
+    },
+    'momentum': {
+        'weight': 0.3,
+        'direction': 'positive',
+        'params': {'period': 20},
+    },
+    'historical_volatility': {
+        'weight': 0.20,
+        'direction': 'negative',
+        'params': {'period': 20, 'annualize': True},
+    },
+    'max_drawdown': {
+        'weight': 0.1,
+        'direction': 'negative',
+        'params': {'period': 60},
+    },
+}
+
+
 class FactorScorer:
     """
     多因子打分器
     
     管理多个因子，计算因子值，标准化后加权合成综合得分。
+    
+    支持多种归一化方法：
+    - winsorize: 极端值处理
+    - zscore: Z-score标准化
+    - minmax: Min-Max归一化
+    - rank: 排名归一化
     
     Example:
         scorer = FactorScorer({
@@ -68,7 +112,11 @@ class FactorScorer:
         # {'510300.SH': 0.85, '518880.SH': -0.32}
     """
     
-    def __init__(self, factor_configs: Optional[Dict[str, Dict]] = None):
+    def __init__(
+        self,
+        factor_configs: Optional[Dict[str, Dict]] = None,
+        normalization_config: Optional[Dict] = None,
+    ):
         """
         初始化因子打分器
         
@@ -82,8 +130,20 @@ class FactorScorer:
                     }
                 }
                 如果为 None，使用默认配置
+            normalization_config: 归一化配置，格式如下：
+                {
+                    'winsorize': {
+                        'enabled': True,
+                        'lower': 0.025,
+                        'upper': 0.975,
+                    },
+                    'standardize': {
+                        'method': 'zscore',  # 'zscore', 'minmax', 'rank'
+                    },
+                }
         """
         self.factor_configs = factor_configs or DEFAULT_FACTOR_CONFIGS
+        self.normalization_config = normalization_config or DEFAULT_NORMALIZATION_CONFIG
         self.registry = FactorRegistry()
         self._validate_configs()
         self._register_factors()
@@ -110,6 +170,8 @@ class FactorScorer:
             'trend_strength': TrendStrengthFactor,
             'historical_volatility': HistoricalVolatilityFactor,
             'atr': ATRFactor,
+            'sharpe_ratio': SharpeRatioFactor,
+            'max_drawdown': MaxDrawdownFactor,
         }
         
         for factor_name, cfg in self.factor_configs.items():
@@ -143,7 +205,7 @@ class FactorScorer:
         """
         factor_values = self._compute_factor_values(data_dict, lookback)
         
-        standardized = self._standardize_cross_sectional(factor_values)
+        standardized = self._normalize_factors(factor_values)
         
         scores = self._aggregate_scores(standardized)
         
@@ -197,20 +259,22 @@ class FactorScorer:
         
         return factor_values
     
-    def _standardize_cross_sectional(
+    def _normalize_factors(
         self,
         factor_values: Dict[str, Dict[str, float]],
     ) -> Dict[str, Dict[str, float]]:
         """
-        横截面标准化因子值
+        因子归一化处理
         
-        对每个因子，在所有资产间进行 Z-score 标准化。
+        步骤：
+        1. 极端值处理 (Winsorize)
+        2. 标准化 (Z-score / Min-Max / Rank)
         
         Args:
             factor_values: {symbol: {factor_name: value}}
         
         Returns:
-            标准化后的 {symbol: {factor_name: standardized_value}}
+            归一化后的 {symbol: {factor_name: normalized_value}}
         """
         symbols = list(factor_values.keys())
         factor_names = list(self.factor_configs.keys())
@@ -222,8 +286,76 @@ class FactorScorer:
         
         factor_matrix = factor_matrix.astype(float)
         
-        standardized = pd.DataFrame(index=symbols, columns=factor_names)
-        for factor_name in factor_names:
+        if self.normalization_config.get('winsorize', {}).get('enabled', False):
+            factor_matrix = self._winsorize_matrix(factor_matrix)
+        
+        standardized = self._standardize_matrix(factor_matrix)
+        
+        result = {}
+        for symbol in symbols:
+            result[symbol] = {}
+            for factor_name in factor_names:
+                result[symbol][factor_name] = standardized.loc[symbol, factor_name]
+        
+        return result
+    
+    def _winsorize_matrix(self, factor_matrix: pd.DataFrame) -> pd.DataFrame:
+        """
+        对因子矩阵进行极端值处理
+        
+        Args:
+            factor_matrix: 因子值矩阵 (index: symbols, columns: factors)
+        
+        Returns:
+            处理后的因子矩阵
+        """
+        winsorize_config = self.normalization_config.get('winsorize', {})
+        lower = winsorize_config.get('lower', 0.025)
+        upper = winsorize_config.get('upper', 0.975)
+        
+        result = factor_matrix.copy()
+        
+        for factor_name in result.columns:
+            values = result[factor_name].values
+            
+            lower_bound = np.quantile(values, lower)
+            upper_bound = np.quantile(values, upper)
+            
+            result[factor_name] = np.clip(values, lower_bound, upper_bound)
+        
+        return result
+    
+    def _standardize_matrix(self, factor_matrix: pd.DataFrame) -> pd.DataFrame:
+        """
+        对因子矩阵进行标准化
+        
+        Args:
+            factor_matrix: 因子值矩阵 (index: symbols, columns: factors)
+        
+        Returns:
+            标准化后的因子矩阵
+        """
+        method = self.normalization_config.get('standardize', {}).get('method', 'zscore')
+        
+        if method == 'zscore':
+            return self._zscore_standardize(factor_matrix)
+        elif method == 'minmax':
+            return self._minmax_standardize(factor_matrix)
+        elif method == 'rank':
+            return self._rank_standardize(factor_matrix)
+        else:
+            logger.warning(f"未知的标准化方法: {method}, 使用 Z-score")
+            return self._zscore_standardize(factor_matrix)
+    
+    def _zscore_standardize(self, factor_matrix: pd.DataFrame) -> pd.DataFrame:
+        """
+        Z-score 标准化
+        
+        公式: z = (x - mean) / std
+        """
+        standardized = pd.DataFrame(index=factor_matrix.index, columns=factor_matrix.columns)
+        
+        for factor_name in factor_matrix.columns:
             values = factor_matrix[factor_name]
             
             mean = values.mean()
@@ -234,13 +366,61 @@ class FactorScorer:
             else:
                 standardized[factor_name] = (values - mean) / std
         
-        result = {}
-        for symbol in symbols:
-            result[symbol] = {}
-            for factor_name in factor_names:
-                result[symbol][factor_name] = standardized.loc[symbol, factor_name]
+        return standardized
+    
+    def _minmax_standardize(self, factor_matrix: pd.DataFrame) -> pd.DataFrame:
+        """
+        Min-Max 归一化
         
-        return result
+        公式: x_norm = (x - min) / (max - min)
+        """
+        standardized = pd.DataFrame(index=factor_matrix.index, columns=factor_matrix.columns)
+        
+        for factor_name in factor_matrix.columns:
+            values = factor_matrix[factor_name]
+            
+            min_val = values.min()
+            max_val = values.max()
+            
+            if max_val == min_val:
+                standardized[factor_name] = 0.5
+            else:
+                standardized[factor_name] = (values - min_val) / (max_val - min_val)
+        
+        return standardized
+    
+    def _rank_standardize(self, factor_matrix: pd.DataFrame) -> pd.DataFrame:
+        """
+        排名归一化
+        
+        公式: rank_norm = rank(x) / n
+        """
+        standardized = pd.DataFrame(index=factor_matrix.index, columns=factor_matrix.columns)
+        
+        for factor_name in factor_matrix.columns:
+            values = factor_matrix[factor_name]
+            n = len(values)
+            
+            standardized[factor_name] = values.rank(method='average') / n
+        
+        return standardized
+    
+    def _standardize_cross_sectional(
+        self,
+        factor_values: Dict[str, Dict[str, float]],
+    ) -> Dict[str, Dict[str, float]]:
+        """
+        横截面标准化因子值（兼容旧接口）
+        
+        对每个因子，在所有资产间进行 Z-score 标准化。
+        
+        Args:
+            factor_values: {symbol: {factor_name: value}}
+        
+        Returns:
+            标准化后的 {symbol: {factor_name: standardized_value}}
+        """
+        return self._normalize_factors(factor_values)
     
     def _aggregate_scores(
         self,
@@ -291,5 +471,14 @@ class FactorScorer:
             })
         return pd.DataFrame(rows)
     
+    def get_normalization_info(self) -> Dict[str, Any]:
+        """
+        获取归一化配置信息
+        
+        Returns:
+            归一化配置字典
+        """
+        return self.normalization_config.copy()
+    
     def __repr__(self) -> str:
-        return f"FactorScorer(factors={len(self.factor_configs)})"
+        return f"FactorScorer(factors={len(self.factor_configs)}, normalization={self.normalization_config['standardize']['method']})"
