@@ -4,16 +4,18 @@
 演示如何使用因子库构建多因子轮动策略并运行回测。
 """
 
-import sys
-from pathlib import Path
-# 添加项目根目录到路径，确保使用当前开发代码而非已安装包
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
-
 from datetime import date
 from trader_center.backtest import BacktestRunner, BacktestConfig
-from trader_center.backtest.strategy import MultiFactorRotationStrategy, ASSET_CONFIG
+from trader_center.backtest.strategy import MultiFactorRotationStrategy
 from trader_center.backtest.strategy.factor_scorer import DEFAULT_FACTOR_CONFIGS
+
+ASSET_CONFIG = {
+    '518880.SH': {'name': '黄金ETF', 'category': 'commodity'},
+    '510300.SH': {'name': '沪深300ETF', 'category': 'equity_cn'},
+    '513100.SH': {'name': '纳指ETF', 'category': 'equity_us'},
+    '511010.SH': {'name': '国债ETF', 'category': 'bond'},
+    '159981.SZ': {'name': '能源化工ETF', 'category': 'commodity'},
+}
 
 
 def main():
@@ -90,8 +92,8 @@ def main():
     result = runner.run(
         strategy=MultiFactorRotationStrategy,
         symbols=symbols,
-        start="2019-01-01",
-        end="2026-03-10",
+        start="2020-01-10",
+        end="2026-03-23",
         initial_cash=config.initial_cash,
         strategy_params={
             'rebalance_freq': 20,
@@ -99,6 +101,12 @@ def main():
             'factor_configs': factor_configs,
             'lookback': 60,
             'exec_type': 'close',
+            # 止损参数（默认关闭，按需开启）
+            # 'stop_loss_pct': 0.08,               # 固定止损 8%
+            # 'trailing_stop_pct': 0.10,            # 追踪止损 10%
+            # 'portfolio_stop_pct': 0.15,           # 组合回撤止损 15%
+            # 'portfolio_stop_recovery_pct': 0.05,  # 组合止损恢复阈值 5%
+            # 'stop_cooldown_days': 5,              # 止损后冷却期5天（期间不再买入）
         }
     )
     
@@ -165,10 +173,21 @@ def main():
    - 每20个交易日再平衡一次
    - 根据最新因子得分调整持仓
 
+止损机制（可选，默认关闭）:
+- stop_loss_pct: 固定止损，入场价跌破 N% 即清仓
+- trailing_stop_pct: 追踪止损，从持仓最高价回落 N% 即清仓
+- portfolio_stop_pct: 组合止损，整体回撤超过 N% 时全仓清空
+- portfolio_stop_recovery_pct: 组合止损后回撤收窄至此阈值时恢复再平衡
+- stop_cooldown_days: 止损后冷却期天数，期间该标的不再买入（防止刚止损又买回）
+
+优化说明:
+- 止损使用市价单执行，确保快速离场
+- 止损触发后进入冷却期，避免再平衡时立即买回
+- 冷却期内该标的会被从候选池中排除
+
 扩展建议:
 - 添加更多因子类型 (基本面、另类数据)
 - 根据因子IC动态调整权重
-- 添加风险控制 (波动率目标、最大回撤控制)
 - 添加市场择时模块
 """)
 
