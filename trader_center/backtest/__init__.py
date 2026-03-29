@@ -28,6 +28,9 @@ def __getattr__(name):
     if name == "PerformanceAnalytics":
         from .analytics import PerformanceAnalytics
         return PerformanceAnalytics
+    if name in ("AStockSizer", "AStockCommission", "configure_astock_broker"):
+        from .broker import AStockSizer, AStockCommission, configure_astock_broker
+        return locals()[name]
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -38,4 +41,7 @@ __all__ = [
     "BacktestConfig",
     "TradeLogger",
     "PerformanceAnalytics",
+    "AStockSizer",
+    "AStockCommission",
+    "configure_astock_broker",
 ]
