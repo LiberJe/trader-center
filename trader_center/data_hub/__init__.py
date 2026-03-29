@@ -460,6 +460,696 @@ def delete_all_fund_flow_data(
     return result
 
 
+def get_financial_indicator(
+    symbol: str,
+) -> pd.DataFrame:
+    """
+    获取个股财务指标数据
+    
+    Parameters
+    ----------
+    symbol : str
+        股票代码，如 "000001.SZ", "600000.SH"
+    
+    Returns
+    -------
+    pd.DataFrame
+        财务指标数据，包含:
+        - date: 报告日期
+        - pe_ratio: 市盈率
+        - pb_ratio: 市净率
+        - ps_ratio: 市销率
+        - market_cap: 总市值
+        - revenue: 营业收入
+        - net_income: 净利润
+        - total_assets: 总资产
+        - total_equity: 净资产
+        - roe: 净资产收益率
+        - debt_ratio: 资产负债率
+        等字段
+    
+    Examples
+    --------
+    >>> df = dh.get_financial_indicator("000001.SZ")
+    """
+    cache = _get_cache()
+    
+    cache_key = f"financial_indicator:{symbol}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+    
+    code, exchange = _parse_symbol(symbol)
+    
+    try:
+        import akshare as ak
+        
+        df = ak.stock_financial_analysis_indicator(symbol=code)
+        
+        if df.empty:
+            df = get_profit_sheet(symbol)
+        
+        if df.empty:
+            return pd.DataFrame()
+        
+        df = _normalize_financial_df(df, symbol)
+        
+        cache.set(cache_key, df, ttl=3600)
+        
+        return df
+        
+    except Exception as e:
+        logger.warning(f"获取财务指标失败 {symbol}: {e}")
+        return pd.DataFrame()
+
+
+def get_balance_sheet(
+    symbol: str,
+) -> pd.DataFrame:
+    """
+    获取个股资产负债表数据
+    
+    Parameters
+    ----------
+    symbol : str
+        股票代码，如 "000001.SZ"
+    
+    Returns
+    -------
+    pd.DataFrame
+        资产负债表数据，包含:
+        - date: 报告日期
+        - total_assets: 总资产
+        - total_liabilities: 总负债
+        - total_equity: 所有者权益
+        - current_assets: 流动资产
+        - current_liabilities: 流动负债
+        - cash: 货币资金
+        - inventory: 存货
+    
+    Examples
+    --------
+    >>> df = dh.get_balance_sheet("000001.SZ")
+    """
+    cache = _get_cache()
+    
+    cache_key = f"balance_sheet:{symbol}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+    
+    code, exchange = _parse_symbol(symbol)
+    
+    try:
+        import akshare as ak
+        
+        df = ak.stock_financial_report_sina(stock=code, symbol='资产负债表')
+        
+        if df.empty:
+            return pd.DataFrame()
+        
+        df = _normalize_financial_df(df, symbol)
+        
+        cache.set(cache_key, df, ttl=3600)
+        
+        return df
+        
+    except Exception as e:
+        logger.warning(f"获取资产负债表失败 {symbol}: {e}")
+        return pd.DataFrame()
+
+
+def get_profit_sheet(
+    symbol: str,
+) -> pd.DataFrame:
+    """
+    获取个股利润表数据
+    
+    Parameters
+    ----------
+    symbol : str
+        股票代码，如 "000001.SZ"
+    
+    Returns
+    -------
+    pd.DataFrame
+        利润表数据，包含:
+        - date: 报告日期
+        - revenue: 营业收入
+        - cost_of_goods: 营业成本
+        - net_income: 净利润
+        - eps: 每股收益
+        - pe_ratio: 市盈率
+        - pb_ratio: 市净率
+        - ps_ratio: 市销率
+        - gross_margin: 毛利率
+        - net_margin: 净利率
+    
+    Examples
+    --------
+    >>> df = dh.get_profit_sheet("000001.SZ")
+    """
+    cache = _get_cache()
+    
+    cache_key = f"profit_sheet:{symbol}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+    
+    code, exchange = _parse_symbol(symbol)
+    
+    try:
+        import akshare as ak
+        
+        df = ak.stock_financial_report_sina(stock=code, symbol='利润表')
+        
+        if df.empty:
+            return pd.DataFrame()
+        
+        df = _normalize_financial_df(df, symbol)
+        
+        cache.set(cache_key, df, ttl=3600)
+        
+        return df
+        
+    except Exception as e:
+        logger.warning(f"获取利润表失败 {symbol}: {e}")
+        return pd.DataFrame()
+
+
+def get_cashflow_sheet(
+    symbol: str,
+) -> pd.DataFrame:
+    """
+    获取个股现金流量表数据
+    
+    Parameters
+    ----------
+    symbol : str
+        股票代码，如 "000001.SZ"
+    
+    Returns
+    -------
+    pd.DataFrame
+        现金流量表数据，包含:
+        - date: 报告日期
+        - operating_cash_flow: 经营活动现金流量净额
+        - investing_cash_flow: 投资活动现金流量净额
+        - financing_cash_flow: 筹资活动现金流量净额
+        - free_cash_flow: 自由现金流
+    
+    Examples
+    --------
+    >>> df = dh.get_cashflow_sheet("000001.SZ")
+    """
+    cache = _get_cache()
+    
+    cache_key = f"cashflow_sheet:{symbol}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+    
+    code, exchange = _parse_symbol(symbol)
+    
+    try:
+        import akshare as ak
+        
+        df = ak.stock_financial_report_sina(stock=code, symbol='现金流量表')
+        
+        if df.empty:
+            return pd.DataFrame()
+        
+        df = _normalize_financial_df(df, symbol)
+        
+        cache.set(cache_key, df, ttl=3600)
+        
+        return df
+        
+    except Exception as e:
+        logger.warning(f"获取现金流量表失败 {symbol}: {e}")
+        return pd.DataFrame()
+
+
+def get_fundamental_data(
+    symbol: str,
+) -> pd.DataFrame:
+    """
+    综合获取个股基本面数据
+    
+    合并资产负债表、利润表、现金流量表数据，返回完整的因子计算所需数据。
+    
+    Parameters
+    ----------
+    symbol : str
+        股票代码，如 "000001.SZ"
+    
+    Returns
+    -------
+    pd.DataFrame
+        综合基本面数据，包含:
+        - date: 报告日期
+        - pe_ratio: 市盈率
+        - pb_ratio: 市净率
+        - ps_ratio: 市销率
+        - revenue: 营业收入
+        - net_income: 净利润
+        - total_assets: 总资产
+        - total_equity: 所有者权益
+        - total_liabilities: 总负债
+        - current_assets: 流动资产
+        - current_liabilities: 流动负债
+        - operating_cash_flow: 经营现金流
+        - cash: 货币资金
+        - inventory: 存货
+        - eps: 每股收益
+        - gross_margin: 毛利率
+        - net_margin: 净利率
+        等字段
+    
+    Examples
+    --------
+    >>> df = dh.get_fundamental_data("000001.SZ")
+    """
+    cache = _get_cache()
+    
+    cache_key = f"fundamental_data:{symbol}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+    
+    code, exchange = _parse_symbol(symbol)
+    
+    try:
+        import akshare as ak
+        
+        df_ths = ak.stock_financial_abstract_ths(symbol=code, indicator='按报告期')
+        
+        if df_ths.empty:
+            return pd.DataFrame()
+        
+        column_mapping = {
+            '报告期': 'date',
+            '净利润同比增长率': 'net_income_growth',
+            '营业总收入同比增长率': 'revenue_growth',
+            '净利润': 'net_income',
+            '扣非净利润': 'net_income_deducted',
+            '营业总收入': 'revenue',
+            '基本每股收益': 'eps',
+            '每股净资产': 'book_value_per_share',
+            '每股资本公积金': 'capital_reserve_per_share',
+            '每股未分配利润': 'retained_earnings_per_share',
+            '每股经营现金流': 'ocf_per_share',
+            '销售净利率': 'net_margin',
+            '净资产收益率': 'roe',
+            '净资产收益率-摊薄': 'roe_diluted',
+            '营业周期': 'operating_cycle',
+            '应收账款周转天数': 'ar_turnover_days',
+            '流动比率': 'current_ratio',
+            '速动比率': 'quick_ratio',
+            '产权比率': 'equity_ratio',
+            '资产负债率': 'debt_ratio',
+            '销售毛利率': 'gross_margin',
+        }
+        
+        rename_cols = {}
+        used_targets = set()
+        for col in df_ths.columns:
+            col_str = str(col).strip()
+            for cn_name, en_name in column_mapping.items():
+                if cn_name == col_str or cn_name in col_str:
+                    if en_name not in used_targets:
+                        rename_cols[col] = en_name
+                        used_targets.add(en_name)
+                    break
+        
+        df = df_ths.rename(columns=rename_cols)
+        
+        if 'date' in df.columns:
+            df['date'] = pd.to_datetime(df['date'])
+            df = df.set_index('date')
+            df = df.sort_index()
+        
+        numeric_cols = ['net_income', 'revenue', 'eps', 'book_value_per_share', 
+                        'ocf_per_share', 'net_margin', 'roe', 'current_ratio', 
+                        'quick_ratio', 'debt_ratio', 'revenue_growth', 'net_income_growth']
+        
+        for col in numeric_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col].astype(str).str.replace('%', '').str.replace('万', 'e4').str.replace('亿', 'e8'), errors='coerce')
+        
+        try:
+            df_balance = ak.stock_financial_report_sina(stock=code, symbol='资产负债表')
+            if not df_balance.empty:
+                balance_mapping = {
+                    '报告日': 'date',
+                    '资产总计': 'total_assets',
+                    '负债合计': 'total_liabilities',
+                    '所有者权益(或股东权益)合计': 'total_equity',
+                    '流动资产合计': 'current_assets',
+                    '流动负债合计': 'current_liabilities',
+                    '货币资金': 'cash',
+                    '存货': 'inventory',
+                }
+                
+                balance_rename = {}
+                for col in df_balance.columns:
+                    col_str = str(col).strip()
+                    for cn_name, en_name in balance_mapping.items():
+                        if cn_name == col_str:
+                            balance_rename[col] = en_name
+                            break
+                
+                for col in df_balance.columns:
+                    if col in balance_rename:
+                        continue
+                    col_str = str(col).strip()
+                    for cn_name, en_name in balance_mapping.items():
+                        if cn_name in col_str and en_name not in balance_rename.values():
+                            balance_rename[col] = en_name
+                            break
+                
+                df_balance = df_balance.rename(columns=balance_rename)
+                
+                if 'date' in df_balance.columns:
+                    df_balance['date'] = pd.to_datetime(df_balance['date'], format='%Y%m%d')
+                    df_balance = df_balance.set_index('date')
+                    df_balance = df_balance.sort_index()
+                    
+                    for col in ['total_assets', 'total_liabilities', 'total_equity', 
+                                'current_assets', 'current_liabilities', 'cash', 'inventory']:
+                        if col in df_balance.columns:
+                            df_balance[col] = pd.to_numeric(df_balance[col], errors='coerce')
+                    
+                    cols_to_merge = [c for c in ['total_assets', 'total_liabilities', 'total_equity',
+                                                  'current_assets', 'current_liabilities', 'cash', 'inventory']
+                                     if c in df_balance.columns]
+                    if cols_to_merge:
+                        df_balance_subset = df_balance[cols_to_merge].dropna(axis=1, how='all')
+                        if not df_balance_subset.empty:
+                            df = df.combine_first(df_balance_subset)
+        except Exception as e:
+            logger.debug(f"获取资产负债表数据失败 {symbol}: {e}")
+        
+        try:
+            df_income = ak.stock_financial_report_sina(stock=code, symbol='利润表')
+            if not df_income.empty:
+                income_mapping = {
+                    '报告日': 'date',
+                    '营业成本': 'cost_of_goods',
+                    '营业总成本': 'total_operating_cost',
+                    '营业利润': 'operating_profit',
+                    '利润总额': 'total_profit',
+                }
+                
+                income_rename = {}
+                for col in df_income.columns:
+                    col_str = str(col).strip()
+                    for cn_name, en_name in income_mapping.items():
+                        if cn_name == col_str:
+                            income_rename[col] = en_name
+                            break
+                
+                for col in df_income.columns:
+                    if col in income_rename:
+                        continue
+                    col_str = str(col).strip()
+                    for cn_name, en_name in income_mapping.items():
+                        if cn_name in col_str and en_name not in income_rename.values():
+                            income_rename[col] = en_name
+                            break
+                
+                df_income = df_income.rename(columns=income_rename)
+                
+                if 'date' in df_income.columns:
+                    df_income['date'] = pd.to_datetime(df_income['date'], format='%Y%m%d')
+                    df_income = df_income.set_index('date')
+                    df_income = df_income.sort_index()
+                    
+                    for col in ['cost_of_goods', 'total_operating_cost', 'operating_profit', 'total_profit']:
+                        if col in df_income.columns:
+                            df_income[col] = pd.to_numeric(df_income[col], errors='coerce')
+                    
+                    cols_to_merge = [c for c in ['cost_of_goods', 'total_operating_cost', 
+                                                  'operating_profit', 'total_profit']
+                                     if c in df_income.columns]
+                    if cols_to_merge:
+                        df_income_subset = df_income[cols_to_merge].dropna(axis=1, how='all')
+                        if not df_income_subset.empty:
+                            df = df.combine_first(df_income_subset)
+        except Exception as e:
+            logger.debug(f"获取利润表数据失败 {symbol}: {e}")
+        
+        df['symbol'] = symbol
+        
+        cache.set(cache_key, df, ttl=3600)
+        
+        return df
+        
+    except Exception as e:
+        logger.warning(f"获取综合基本面数据失败 {symbol}: {e}")
+        return pd.DataFrame()
+
+
+def get_financial_report(
+    symbol: str,
+    report_type: str = "资产负债表",
+) -> pd.DataFrame:
+    """
+    获取个股财务报表数据
+    
+    Parameters
+    ----------
+    symbol : str
+        股票代码，如 "000001.SZ"
+    report_type : str
+        报表类型: "资产负债表", "利润表", "现金流量表"
+    
+    Returns
+    -------
+    pd.DataFrame
+        财务报表数据
+    
+    Examples
+    --------
+    >>> df = dh.get_financial_report("000001.SZ", "利润表")
+    """
+    router = _get_router()
+    cache = _get_cache()
+    
+    cache_key = f"financial_report:{symbol}:{report_type}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+    
+    code, exchange = _parse_symbol(symbol)
+    
+    try:
+        import akshare as ak
+        
+        df = ak.stock_financial_report_sina(stock=code, symbol=report_type)
+        
+        if df.empty:
+            return pd.DataFrame()
+        
+        cache.set(cache_key, df, ttl=3600)
+        
+        return df
+        
+    except Exception as e:
+        logger.warning(f"获取财务报表失败 {symbol}: {e}")
+        return pd.DataFrame()
+
+
+def get_valuation_data(
+    symbol: str,
+) -> pd.DataFrame:
+    """
+    获取个股估值数据（PE、PB、PS等历史数据）
+    
+    Parameters
+    ----------
+    symbol : str
+        股票代码，如 "000001.SZ"
+    
+    Returns
+    -------
+    pd.DataFrame
+        估值数据，包含:
+        - date: 日期
+        - pe_ratio: 市盈率
+        - pb_ratio: 市净率
+        - ps_ratio: 市销率
+        - market_cap: 总市值
+        - circulation_market_cap: 流通市值
+    
+    Examples
+    --------
+    >>> df = dh.get_valuation_data("000001.SZ")
+    """
+    cache = _get_cache()
+    
+    cache_key = f"valuation_data:{symbol}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+    
+    code, exchange = _parse_symbol(symbol)
+    
+    try:
+        import akshare as ak
+        
+        df = ak.stock_zh_valuation_baidu(symbol=code, indicator='总市值')
+        
+        if df.empty:
+            return pd.DataFrame()
+        
+        df = df.rename(columns={
+            'date': 'date',
+            'value': 'market_cap',
+        })
+        
+        if 'date' in df.columns:
+            df['date'] = pd.to_datetime(df['date'])
+            df = df.set_index('date')
+        
+        cache.set(cache_key, df, ttl=3600)
+        
+        return df
+        
+    except Exception as e:
+        logger.warning(f"获取估值数据失败 {symbol}: {e}")
+        return pd.DataFrame()
+
+
+def get_main_business(
+    symbol: str,
+) -> pd.DataFrame:
+    """
+    获取主营业务构成数据
+    
+    Parameters
+    ----------
+    symbol : str
+        股票代码，如 "000001.SZ"
+    
+    Returns
+    -------
+    pd.DataFrame
+        主营业务构成数据
+    
+    Examples
+    --------
+    >>> df = dh.get_main_business("000001.SZ")
+    """
+    cache = _get_cache()
+    
+    cache_key = f"main_business:{symbol}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+    
+    code, exchange = _parse_symbol(symbol)
+    
+    try:
+        import akshare as ak
+        
+        df = ak.stock_zygc_em(symbol=code)
+        
+        if df.empty:
+            return pd.DataFrame()
+        
+        cache.set(cache_key, df, ttl=86400)
+        
+        return df
+        
+    except Exception as e:
+        logger.warning(f"获取主营业务数据失败 {symbol}: {e}")
+        return pd.DataFrame()
+
+
+def _parse_symbol(symbol: str) -> tuple:
+    """解析股票代码"""
+    parts = symbol.split(".")
+    if len(parts) != 2:
+        raise ValueError(f"Invalid symbol format: {symbol}, expected 'code.exchange'")
+    return parts[0], parts[1]
+
+
+def _normalize_financial_df(df: pd.DataFrame, symbol: str) -> pd.DataFrame:
+    """标准化财务数据DataFrame"""
+    df = df.loc[:, ~df.columns.duplicated()]
+    
+    column_mapping = {
+        '报告日': 'date',
+        '日期': 'date',
+        '报告期': 'date',
+        '营业收入': 'revenue',
+        '营业总收入': 'revenue',
+        '利息收入': 'interest_income',
+        '利息支出': 'interest_expense',
+        '手续费及佣金净收入': 'commission_income',
+        '营业支出': 'operating_expense',
+        '营业成本': 'cost_of_goods',
+        '营业利润': 'operating_profit',
+        '利润总额': 'total_profit',
+        '净利润': 'net_income',
+        '归属于母公司的净利润': 'net_income',
+        '归属于母公司所有者的净利润': 'net_income',
+        '基本每股收益': 'eps',
+        '稀释每股收益': 'eps_diluted',
+        '资产总计': 'total_assets',
+        '资产': 'total_assets',
+        '总资产': 'total_assets',
+        '负债合计': 'total_liabilities',
+        '总负债': 'total_liabilities',
+        '负债': 'total_liabilities',
+        '所有者权益合计': 'total_equity',
+        '净资产': 'total_equity',
+        '所有者权益': 'total_equity',
+        '归属于母公司股东的权益': 'total_equity',
+        '股东权益': 'total_equity',
+        '流动资产合计': 'current_assets',
+        '流动资产': 'current_assets',
+        '流动负债合计': 'current_liabilities',
+        '流动负债': 'current_liabilities',
+        '货币资金': 'cash',
+        '现金及存放中央银行款项': 'cash',
+        '存货': 'inventory',
+        '应收账款': 'receivables',
+        '应付账款': 'accounts_payable',
+        '经营活动产生的现金流量净额': 'operating_cash_flow',
+        '投资活动产生的现金流量净额': 'investing_cash_flow',
+        '筹资活动产生的现金流量净额': 'financing_cash_flow',
+        '净资产收益率': 'roe',
+        'ROE': 'roe',
+        '资产负债率': 'debt_ratio',
+        '毛利率': 'gross_margin',
+        '净利率': 'net_margin',
+        '股本': 'shares_outstanding',
+        '实收资本（或股本）': 'shares_outstanding',
+    }
+    
+    rename_cols = {}
+    used_targets = set()
+    for col in df.columns:
+        for cn_name, en_name in column_mapping.items():
+            if cn_name == str(col) or cn_name in str(col):
+                if en_name not in used_targets:
+                    rename_cols[col] = en_name
+                    used_targets.add(en_name)
+                break
+    
+    df = df.rename(columns=rename_cols)
+    
+    if 'date' in df.columns:
+        df['date'] = pd.to_datetime(df['date'])
+        df = df.set_index('date')
+    
+    df['symbol'] = symbol
+    
+    return df
+
+
 __all__ = [
     "configure",
     "get_daily_bars",
@@ -471,4 +1161,12 @@ __all__ = [
     "clear_cache",
     "delete_fund_flow_data",
     "delete_all_fund_flow_data",
+    "get_financial_indicator",
+    "get_financial_report",
+    "get_valuation_data",
+    "get_main_business",
+    "get_balance_sheet",
+    "get_profit_sheet",
+    "get_cashflow_sheet",
+    "get_fundamental_data",
 ]
