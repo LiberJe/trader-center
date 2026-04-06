@@ -1,5 +1,6 @@
 .worktrees/
 logs/
+factor_research_results/
 
 # Python
 __pycache__/

@@ -8,6 +8,10 @@ dependencies = [
     "akshare>=1.15",
     "pyarrow>=15.0",
     "backtrader>=1.9.78",
+    "alphalens-reloaded>=0.4.3",
+    "scipy>=1.10",
+    "scikit-learn>=1.2",
+    "seaborn>=0.12",
 ]
 
 [project.optional-dependencies]
@@ -21,3 +25,11 @@ backtest = [
     "quantstats>=0.0.62",
     "matplotlib>=3.5",
 ]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["trader_center*", "backtest_runner*"]
+exclude = ["logs*", "backtest_results*", "tests*", "examples*"]

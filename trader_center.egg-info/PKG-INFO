@@ -7,8 +7,15 @@ Requires-Dist: pandas>=2.0
 Requires-Dist: akshare>=1.15
 Requires-Dist: pyarrow>=15.0
 Requires-Dist: backtrader>=1.9.78
+Requires-Dist: alphalens-reloaded>=0.4.3
+Requires-Dist: scipy>=1.10
+Requires-Dist: scikit-learn>=1.2
+Requires-Dist: seaborn>=0.12
 Provides-Extra: dev
 Requires-Dist: pytest>=8.0; extra == "dev"
 Requires-Dist: pytest-cov; extra == "dev"
 Requires-Dist: black; extra == "dev"
 Requires-Dist: ruff; extra == "dev"
+Provides-Extra: backtest
+Requires-Dist: quantstats>=0.0.62; extra == "backtest"
+Requires-Dist: matplotlib>=3.5; extra == "backtest"
