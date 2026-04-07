@@ -130,8 +130,7 @@ class FactorReport:
             metadata=metadata,
         )
         
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"{factor_name}_report_{timestamp}.html"
+        filename = f"{factor_name}_report.html"
         filepath = self.output_dir / filename
         
         with open(filepath, 'w', encoding='utf-8') as f:
@@ -530,8 +529,7 @@ class FactorReport:
             figures=figures,
         )
         
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"multi_factor_report_{timestamp}.html"
+        filename = f"multi_factor_report.html"
         filepath = self.output_dir / filename
         
         with open(filepath, 'w', encoding='utf-8') as f:

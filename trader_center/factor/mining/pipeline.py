@@ -64,6 +64,7 @@ class FactorAnalysisPipeline:
         analysis_config: Dict = None,
         output_dir: str = './factor_analysis_output',
         use_alphalens: bool = True,
+        use_timestamp_subdir: bool = True,
     ):
         """
         初始化因子分析流水线
@@ -74,6 +75,7 @@ class FactorAnalysisPipeline:
             analysis_config: 分析配置
             output_dir: 输出目录
             use_alphalens: 是否使用Alphalens进行分析
+            use_timestamp_subdir: 是否使用时间戳子目录存储结果
         """
         self.registry = registry or FactorRegistry()
         self.engine = FactorEngine(registry=self.registry)
@@ -91,7 +93,14 @@ class FactorAnalysisPipeline:
         }
         
         self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+        
+        if use_timestamp_subdir:
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            self.run_dir = self.output_dir / timestamp
+        else:
+            self.run_dir = self.output_dir
+        
+        self.run_dir.mkdir(parents=True, exist_ok=True)
         
         self.use_alphalens = use_alphalens and check_alphalens_available()
         
@@ -103,7 +112,7 @@ class FactorAnalysisPipeline:
         
         self.visualizer = FactorVisualizer()
         self.scorer = FactorScorer()
-        self.reporter = FactorReport(str(self.output_dir / 'reports'))
+        self.reporter = FactorReport(str(self.run_dir / 'reports'))
         
         self._results_cache: Dict[str, Dict] = {}
     
@@ -206,6 +215,113 @@ class FactorAnalysisPipeline:
         logger.info(f"因子分析完成: {factor_name}")
         
         return result
+    
+    def run_with_factor(
+        self,
+        factor: Union[str, 'BaseFactor'],
+        price_df: pd.DataFrame,
+        volume_df: pd.DataFrame = None,
+        open_df: pd.DataFrame = None,
+        high_df: pd.DataFrame = None,
+        low_df: pd.DataFrame = None,
+        factor_params: Dict = None,
+        preprocessing: bool = True,
+        scoring: bool = True,
+        visualize: bool = True,
+        generate_report: bool = False,
+        metadata: Dict = None,
+        **kwargs,
+    ) -> Dict:
+        """
+        使用 BaseFactor 实例运行因子分析
+        
+        支持直接传入 BaseFactor 实例或因子名称，自动处理数据格式转换。
+        
+        Args:
+            factor: 因子名称（字符串）或 BaseFactor 实例
+            price_df: 价格数据（宽表格式，index=日期，columns=股票代码）
+            volume_df: 成交量数据（可选）
+            open_df: 开盘价数据（可选）
+            high_df: 最高价数据（可选）
+            low_df: 最低价数据（可选）
+            factor_params: 因子参数（当 factor 为字符串时使用）
+            preprocessing: 是否进行预处理
+            scoring: 是否进行评分
+            visualize: 是否生成可视化
+            generate_report: 是否生成报告
+            metadata: 因子元数据
+            **kwargs: 其他参数
+        
+        Returns:
+            分析结果字典
+        
+        Example:
+            >>> from trader_center.factor.library.technical.momentum import MomentumFactor
+            >>> pipeline = FactorAnalysisPipeline()
+            >>> 
+            >>> # 使用因子实例
+            >>> factor = MomentumFactor(period=20)
+            >>> result = pipeline.run_with_factor(factor, price_df)
+            >>> 
+            >>> # 使用因子名称（需先注册）
+            >>> result = pipeline.run_with_factor('momentum', price_df, factor_params={'period': 20})
+        """
+        from trader_center.factor.library.base import BaseFactor
+        from trader_center.factor.mining.data_adapter import wide_to_dict
+        
+        if isinstance(factor, str):
+            factor_instance = self.registry.get(factor)
+            if factor_params:
+                factor_instance.set_params(**factor_params)
+        elif isinstance(factor, BaseFactor):
+            factor_instance = factor
+        else:
+            raise ValueError(
+                f"factor 参数必须是字符串或 BaseFactor 实例，当前类型: {type(factor)}"
+            )
+        
+        required_data = factor_instance.required_data
+        include_volume = 'volume' in required_data
+        
+        data_dict = wide_to_dict(
+            price_df=price_df,
+            include_ohlcv=True,
+            open_df=open_df,
+            high_df=high_df,
+            low_df=low_df,
+            volume_df=volume_df if include_volume else None,
+        )
+        
+        logger.info(f"使用因子 {factor_instance.name} 计算 {len(data_dict)} 个资产的因子值")
+        
+        factor_values = {}
+        for symbol, data in data_dict.items():
+            try:
+                factor_values[symbol] = factor_instance.compute(data)
+            except Exception as e:
+                logger.warning(f"计算因子 {factor_instance.name} 失败 (symbol={symbol}): {e}")
+                factor_values[symbol] = pd.Series(dtype=float)
+        
+        factor_df = pd.DataFrame(factor_values)
+        
+        params_str = '_'.join(f"{k}{v}" for k, v in factor_instance.params.items())
+        factor_name = f"{factor_instance.name}_{params_str}" if params_str else factor_instance.name
+        
+        full_metadata = factor_instance.get_metadata()
+        if metadata:
+            full_metadata.update(metadata)
+        
+        return self.run(
+            factor_name=factor_name,
+            factor_df=factor_df,
+            price_df=price_df,
+            preprocessing=preprocessing,
+            scoring=scoring,
+            visualize=visualize,
+            generate_report=generate_report,
+            metadata=full_metadata,
+            **kwargs,
+        )
     
     def _preprocess(
         self,
@@ -344,7 +460,7 @@ class FactorAnalysisPipeline:
             图表字典
         """
         figures = {}
-        figure_dir = self.output_dir / 'figures'
+        figure_dir = self.run_dir / 'figures'
         figure_dir.mkdir(parents=True, exist_ok=True)
         
         factor_data = result.get('factor_processed')
