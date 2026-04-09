@@ -62,33 +62,36 @@ def generate_daily_report(result, report_dir: Path, today_str: str, today_displa
             latest_date = df_cap['date'].max()
             latest_capital = df_cap[df_cap['date'] == latest_date].iloc[0].to_dict()
 
-    # 提取当日交易
-    today_trades = []
-    if result.trades:
+    today = datetime.strptime(today_str, "%Y%m%d").date()
+
+    # 提取当日交易（从 order_log 读取实际成交）
+    today_orders = []
+    if result.order_log:
         import pandas as pd
-        df_trades = pd.DataFrame(result.trades)
-        if not df_trades.empty:
-            df_trades['date'] = pd.to_datetime(df_trades['date']).dt.date
-            today = datetime.strptime(today_str, "%Y%m%d").date()
-            today_trades = df_trades[df_trades['date'] == today].to_dict('records')
+        df_orders = pd.DataFrame(result.order_log)
+        if not df_orders.empty:
+            df_orders['datetime'] = pd.to_datetime(df_orders['datetime'])
+            today_orders = df_orders[
+                (df_orders['datetime'].dt.date == today) &
+                (df_orders['status'] == 'completed')
+            ].to_dict('records')
 
     # 计算当日收益
     daily_return = latest_capital.get('daily_return', 0) * 100
 
-    # 获取最新信号（因子得分）
+    # 获取交易信号
+    today_signals = []
     latest_signals = []
     if result.signal_log:
         import pandas as pd
         df_sig = pd.DataFrame(result.signal_log)
         if not df_sig.empty:
-            # 获取最新日期的信号
             df_sig['datetime'] = pd.to_datetime(df_sig['datetime'])
+            signal_types = ['buy', 'rebalance', 'stop_loss', 'trailing_stop']
+            df_sig = df_sig[df_sig['signal_type'].isin(signal_types)]
+            today_signals = df_sig[df_sig['datetime'].dt.date == today].to_dict('records')
             latest_sig_date = df_sig['datetime'].dt.date.max()
-            latest_signals_df = df_sig[df_sig['datetime'].dt.date == latest_sig_date]
-            # 提取因子得分信号
-            latest_signals = latest_signals_df[
-                latest_signals_df['signal_type'].isin(['buy', 'rebalance', 'score_update'])
-            ].to_dict('records')
+            latest_signals = df_sig[df_sig['datetime'].dt.date == latest_sig_date].to_dict('records')
 
     # 生成报告
     report = f"""# ETF夏普轮动策略日报 - {today_display}
@@ -139,30 +142,77 @@ def generate_daily_report(result, report_dir: Path, today_str: str, today_displa
     # 交易信号部分
     report += f"\n## 交易信号\n\n"
 
-    if today_trades:
-        report += "### 今日交易\n\n"
-        report += "| 时间 | 类型 | 资产 | 数量 | 价格 | 金额 |\n"
-        report += "|------|------|------|------|------|------|\n"
+    if today_orders:
+        report += "### 今日成交\n\n"
+        report += "| 时间 | 类型 | 资产 | 数量 | 价格 | 金额 | 费用 |\n"
+        report += "|------|------|------|------|------|------|------|\n"
 
-        for trade in today_trades:
-            trade_time = trade.get('date', '')
-            action = trade.get('action', '')
-            symbol = trade.get('symbol', '')
+        for order in today_orders:
+            order_time = order.get('datetime', '')
+            action = order.get('action', '')
+            symbol = order.get('symbol', '')
             name = ASSET_CONFIG.get(symbol, {}).get('name', symbol)
-            size = abs(trade.get('size', 0))
-            price = trade.get('price', 0)
-            value = trade.get('value', 0)
+            size = order.get('executed_size', 0) or 0
+            price = order.get('executed_price', 0) or 0
+            value = size * price
+            commission = order.get('commission', 0) or 0
 
-            report += f"| {trade_time} | {action} | {name} | {size} | {price:.2f} | {value:,.0f} |\n"
+            report += f"| {order_time} | {action} | {name} | {size} | {price:.3f} | {value:,.0f} | {commission:.2f} |\n"
     else:
-        report += "### 今日交易\n\n*今日无交易*\n"
+        report += "### 今日成交\n\n*今日无交易*\n"
 
-    # 最新再平衡信号
-    if latest_signals:
-        report += "\n### 最新再平衡记录\n\n"
-        for sig in latest_signals[-5:]:  # 只显示最近5条
+    # 建立 symbol -> orders 映射，用于关联信号与成交
+    symbol_orders_map = {}
+    for order in today_orders:
+        symbol_orders_map.setdefault(order.get('symbol'), []).append(order)
+
+    def _render_signals(signals, title):
+        nonlocal report
+        report += f"\n### {title}\n\n"
+        for sig in signals:
+            sig_type = sig.get('signal_type', '')
+            symbol = sig.get('symbol', '')
+            name = ASSET_CONFIG.get(symbol, {}).get('name', symbol)
             trigger = sig.get('trigger_condition', '')
-            report += f"- {trigger}\n"
+            ind = sig.get('indicator_values', {}) or {}
+
+            guidance_lines = []
+            if sig_type == 'rebalance':
+                current_w = float(ind.get('current_weight', 0))
+                target_w = float(ind.get('target_weight', 0))
+                delta = target_w - current_w
+                if delta > 0:
+                    guidance_lines.append(f"建议加仓约 {delta*100:.2f}% (目标权重 {target_w*100:.2f}%)")
+                else:
+                    guidance_lines.append(f"建议减仓约 {abs(delta)*100:.2f}% (目标权重 {target_w*100:.2f}%)")
+            elif sig_type == 'buy':
+                target_w = float(ind.get('target_weight', 0))
+                guidance_lines.append(f"建议建仓至 {target_w*100:.2f}% 权重")
+            elif sig_type in ('stop_loss', 'trailing_stop'):
+                pos_size = int(ind.get('position_size', 0))
+                if pos_size:
+                    guidance_lines.append(f"建议清仓卖出 {pos_size} 股")
+
+            # 关联实际成交
+            for order in symbol_orders_map.get(symbol, []):
+                action = order.get('action', '')
+                size = int(order.get('executed_size', 0) or 0)
+                price = float(order.get('executed_price', 0) or 0)
+                if size and price:
+                    value = size * price
+                    guidance_lines.append(
+                        f"实际成交: {action} {size} 股 @ {price:.3f} (金额 {value:,.0f} 元)"
+                    )
+
+            report += f"- **{name}** (`{sig_type}`): {trigger}"
+            if guidance_lines:
+                report += "\n  - " + "\n  - ".join(guidance_lines)
+            report += "\n"
+
+    if today_signals:
+        _render_signals(today_signals, "今日交易信号")
+    elif latest_signals:
+        _render_signals(latest_signals[-5:], f"最新交易信号 ({latest_sig_date})")
 
     # 明日操作建议
     report += f"""
