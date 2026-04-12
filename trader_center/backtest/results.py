@@ -116,6 +116,71 @@ class BacktestResult:
             return gross_profit if gross_profit > 0 else 1.0
         return gross_profit / gross_loss
 
+    def _calculate_fees(self) -> Dict[str, float]:
+        """
+        计算交易费用统计
+
+        从 order_log 中汇总佣金和印花税：
+        - 买入：费用全是佣金（万2.5，最低5元）
+        - 卖出：费用 = 佣金 + 印花税（千1）
+
+        Returns:
+            费用统计字典，包含 total_commission, total_stamp_duty, total_fees
+        """
+        if not self.order_log:
+            return {'total_commission': 0.0, 'total_stamp_duty': 0.0, 'total_fees': 0.0}
+
+        total_commission = 0.0
+        total_stamp_duty = 0.0
+
+        for order in self.order_log:
+            if order.get('status') != 'completed':
+                continue
+
+            commission = order.get('commission', 0) or 0
+            action = order.get('action', '')
+            executed_price = order.get('executed_price', 0) or 0
+            executed_size = order.get('executed_size', 0) or 0
+            amount = executed_price * executed_size
+
+            if action == 'buy':
+                # 买入：费用全是佣金
+                total_commission += commission
+            elif action == 'sell':
+                # 卖出：印花税 = 金额 * 0.001，佣金 = 总费用 - 印花税
+                stamp_duty = amount * 0.001
+                total_stamp_duty += stamp_duty
+                commission_only = max(0, commission - stamp_duty)
+                total_commission += commission_only
+
+        return {
+            'total_commission': round(total_commission, 2),
+            'total_stamp_duty': round(total_stamp_duty, 2),
+            'total_fees': round(total_commission + total_stamp_duty, 2)
+        }
+
+    @property
+    def total_commission(self) -> float:
+        """总佣金（买入卖出双向）"""
+        return self._calculate_fees()['total_commission']
+
+    @property
+    def total_stamp_duty(self) -> float:
+        """总印花税（仅卖出）"""
+        return self._calculate_fees()['total_stamp_duty']
+
+    @property
+    def total_fees(self) -> float:
+        """交易费用总计"""
+        return self._calculate_fees()['total_fees']
+
+    @property
+    def fee_impact_on_return(self) -> float:
+        """费用对收益的影响比例"""
+        if self.initial_cash == 0:
+            return 0.0
+        return self.total_fees / self.initial_cash
+
     def calculate_max_drawdown(self) -> float:
         """
         计算最大回撤
@@ -165,6 +230,9 @@ class BacktestResult:
 
     def to_summary(self) -> Dict[str, Any]:
         """生成摘要字典"""
+        # 计算费用统计
+        fees = self._calculate_fees()
+
         summary = {
             'strategy_name': self.strategy_name,
             'params': self.params,
@@ -178,6 +246,13 @@ class BacktestResult:
             'max_drawdown': f"{self.calculate_max_drawdown():.2%}",
             'sharpe_ratio': f"{self.calculate_sharpe_ratio():.2f}",
             'duration_seconds': self.duration_seconds,
+            # 费用统计
+            'fees': {
+                'total_commission': fees['total_commission'],
+                'total_stamp_duty': fees['total_stamp_duty'],
+                'total_fees': fees['total_fees'],
+                'fee_impact_on_return_pct': f"{self.fee_impact_on_return:.2%}",
+            }
         }
         # 添加分析器结果（如果有）
         if self.analyzer_results:
@@ -596,3 +671,47 @@ class BacktestResult:
         
         self.log_files['metrics'] = str(filepath)
         return filepath
+
+    def __str__(self) -> str:
+        """
+        生成格式化的回测结果字符串
+
+        Returns:
+            包含费用统计的格式化输出
+        """
+        lines = [
+            "",
+            "=" * 50,
+            f"  {self.strategy_name} 回测结果",
+            "=" * 50,
+            "",
+            "【基本统计】",
+            f"  回测期间: {self.start_date} ~ {self.end_date}",
+            f"  初始资金: {self.initial_cash:,.2f} 元",
+            f"  最终资产: {self.final_value:,.2f} 元",
+            f"  总收益:   {self.final_value - self.initial_cash:+,.2f} 元",
+            f"  收益率:   {self.return_pct:+.2%}",
+            "",
+            "【交易统计】",
+            f"  总交易次数: {self.total_trades}",
+            f"  胜率:       {self.win_rate:.1%}",
+            f"  盈亏比:     {self.profit_factor:.2f}",
+            "",
+            "【风险指标】",
+            f"  最大回撤:   {self.calculate_max_drawdown():.2%}",
+            f"  夏普比率:   {self.calculate_sharpe_ratio():.2f}",
+            "",
+            "【费用统计】",
+            f"  总佣金:     {self.total_commission:,.2f} 元",
+            f"  总印花税:   {self.total_stamp_duty:,.2f} 元",
+            f"  费用合计:   {self.total_fees:,.2f} 元",
+            f"  费用占比:   {self.fee_impact_on_return:.2%}",
+            "=" * 50,
+            "",
+        ]
+
+        if self.error_message:
+            lines.append(f"【错误】{self.error_message}")
+            lines.append("")
+
+        return "\n".join(lines)

@@ -1,5 +1,6 @@
 .worktrees/
 logs/
+task_reports/
 
 # Python
 __pycache__/

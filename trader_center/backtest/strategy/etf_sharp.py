@@ -17,7 +17,31 @@ import logging
 
 from .base import BaseStrategy
 from .factor_scorer import FactorScorer, ETF_SHARP_FACTOR_CONFIGS, DEFAULT_NORMALIZATION_CONFIG
-from .asset_allocation import ASSET_CONFIG
+
+ASSET_CONFIG = {
+    # 宽基指数
+    '510300.SH': {'name': '沪深300ETF', 'category': 'equity_cn'},
+    '159915.SZ': {'name': '创业板ETF', 'category': 'equity_cn'},
+
+    # 海外
+    '513100.SH': {'name': '纳指ETF', 'category': 'equity_us'},
+
+    # 策略
+    # '512890.SH': {'name': '红利低波ETF', 'category': 'equity_cn'},
+
+    # 行业指数
+
+
+    # 债券
+    '511010.SH': {'name': '国债ETF', 'category': 'bond'},  # 5年期国债
+    # '511260.SH': {'name': '十年国债ETF', 'category': 'bond', 'theme': '长债'},          # 10年期国债
+
+    # 商品
+    '518880.SH': {'name': '黄金ETF', 'category': 'commodity'},
+    '159981.SZ': {'name': '能源化工ETF', 'category': 'commodity'},
+    # '159985.SZ': {'name': '豆粕ETF', 'category': 'commodity'},
+    # '159980.SZ': {'name': '有色ETF', 'category': 'commodity'},
+}
 
 
 logger = logging.getLogger(__name__)
@@ -68,13 +92,18 @@ class ETFSharpStrategy(BaseStrategy):
         ('lookback', 60),
         ('factor_configs', None),
         ('normalization_config', None),
-        ('min_score', -np.inf),
         ('weighting_method', 'equal'),
-        ('exec_type', 'open'),
+        ('exec_type', 'close'),
         ('stop_loss_pct', 0.10),
         ('trailing_stop_pct', 0.05),
         ('trailing_stop_enabled', True),
         ('stop_loss_cooldown', 5),
+        ('score_smooth_periods', 1),      # 得分平滑周期数（1=不平滑）
+        ('entry_confirmation', 1),         # 新资产入场确认次数（1=无延迟）
+        ('max_position_pct', 0.95),        # 最大仓位比例（5%现金缓冲）
+        ('min_rebalance_pct', 0.02),       # 最小调仓阈值
+        ('max_turnover_pct', 0.2),        # 单次再平衡最大换手率（0=不限制）
+        ('min_score', -np.inf),            # 最低得分阈值
     )
     
     def __init__(self):
@@ -106,25 +135,33 @@ class ETFSharpStrategy(BaseStrategy):
         self.highest_prices: Dict[str, float] = {}
         self.stop_loss_dates: Dict[str, int] = {}
         self.position_sizes: Dict[str, int] = {}
-        
+        self.score_history: Dict[str, List[float]] = {s: [] for s in self.data_names}
+        self.selection_history: Dict[str, int] = {s: 0 for s in self.data_names}
+        self.last_selected: Dict[str, List[str]] = []
+        self._orders_today: set = set()
+
         self.log(f"策略初始化: 资产数量={len(self.datas)}, 持仓数量={self.p.top_n}")
         self.log(f"因子配置: {list(self.scorer.factor_configs.keys())}")
         self.log(f"归一化方法: {normalization_config.get('standardize', {}).get('method', 'zscore')}")
         self.log(f"权重分配方法: {self.p.weighting_method}")
         self.log(f"订单执行类型: {self.p.exec_type} ({'次日开盘价' if self.p.exec_type == 'open' else '次日收盘价'})")
         self.log(f"止损比例: {self.p.stop_loss_pct:.1%}, 移动止盈: {self.p.trailing_stop_pct:.1%}, 冷却期: {self.p.stop_loss_cooldown}天")
-    
+        self.log(f"得分平滑: {self.p.score_smooth_periods}期, 入场确认: {self.p.entry_confirmation}次, 最大仓位: {self.p.max_position_pct:.0%}, 调仓阈值: {self.p.min_rebalance_pct:.1%}")
+
     def _order_target_percent(self, data, target: float):
         """
         下单调整仓位到目标百分比
-        
+
         Args:
             data: 数据对象
             target: 目标仓位百分比 (0.0 ~ 1.0)
-        
+
         Returns:
             订单对象
         """
+        symbol = data._name if hasattr(data, '_name') else 'unknown'
+        self._orders_today.add(symbol)
+
         if self.p.exec_type == 'close':
             return self.order_target_percent(data=data, target=target, exectype=bt.Order.Close)
         else:
@@ -141,21 +178,22 @@ class ETFSharpStrategy(BaseStrategy):
     
     def next(self):
         """每日执行"""
+        self._orders_today.clear()
         self._log_daily_state()
-        
+
         self._update_data_cache()
-        
+
         if not self._has_enough_data():
             return
-        
+
         if not self.initialized:
             self._initial_rebalance()
             self.initialized = True
             self.last_rebalance_day = len(self.datas[0])
             return
-        
+
         self._check_stop_loss()
-        
+
         if self._should_rebalance():
             self._rebalance()
             self.last_rebalance_day = len(self.datas[0])
@@ -222,46 +260,74 @@ class ETFSharpStrategy(BaseStrategy):
     
     def _compute_scores(self) -> Dict[str, float]:
         """
-        计算所有资产的因子得分
-        
+        计算所有资产的因子得分（使用平滑处理）
+
         Returns:
-            {symbol: score}
+            {symbol: smoothed_score}
         """
         data_dfs = self._get_data_dfs()
-        
+
         if not data_dfs:
             return {}
-        
-        scores = self.scorer.compute_scores(data_dfs, lookback=self.p.lookback)
-        
-        return scores
+
+        raw_scores = self.scorer.compute_scores(data_dfs, lookback=self.p.lookback)
+
+        smoothed_scores = {}
+        for symbol in self.data_names:
+            score = raw_scores.get(symbol, 0.0)
+            self.score_history[symbol].append(score)
+            if len(self.score_history[symbol]) > self.p.score_smooth_periods:
+                self.score_history[symbol] = self.score_history[symbol][-self.p.score_smooth_periods:]
+            smoothed_scores[symbol] = sum(self.score_history[symbol]) / len(self.score_history[symbol])
+
+        return smoothed_scores
     
-    def _select_assets(self, scores: Dict[str, float]) -> List[str]:
+    def _select_assets(self, scores: Dict[str, float], is_initial: bool = False) -> List[str]:
         """
-        选择得分最高的N个资产
-        
+        选择得分最高的N个资产，带入场确认机制
+
         Args:
             scores: {symbol: score}
-        
+            is_initial: 是否为初始建仓
+
         Returns:
             选中的资产代码列表
         """
         sorted_assets = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-        
+
         selected = []
         for symbol, score in sorted_assets:
             if len(selected) >= self.p.top_n:
                 break
-            
+
             if self._is_in_cooldown(symbol):
                 self.log(f"资产 {symbol} 在止损冷却期内，跳过")
                 continue
-            
-            if score >= self.p.min_score:
-                selected.append(symbol)
-            else:
+
+            if score < self.p.min_score:
                 self.log(f"资产 {symbol} 得分 {score:.4f} 低于阈值 {self.p.min_score}, 跳过")
-        
+                continue
+
+            data = self._get_data_by_symbol(symbol)
+            position = self.getposition(data) if data else None
+            has_position = position is not None and position.size > 0
+
+            # 入场确认：非初始建仓时，没有持仓的新入选资产需要连续确认
+            if not is_initial and not has_position and self.p.entry_confirmation > 1:
+                streak = self.selection_history.get(symbol, 0)
+                if streak < self.p.entry_confirmation - 1:
+                    self.log(f"资产 {symbol} 得分 {score:.4f} 但连续入选仅 {streak} 次，需 {self.p.entry_confirmation - 1} 次确认，暂缓买入")
+                    continue
+
+            selected.append(symbol)
+
+        # 更新连续入选历史
+        for symbol in self.data_names:
+            if symbol in selected:
+                self.selection_history[symbol] = self.selection_history.get(symbol, 0) + 1
+            else:
+                self.selection_history[symbol] = 0
+
         return selected
     
     def _calculate_weights(self, selected: List[str], scores: Dict[str, float]) -> Dict[str, float]:
@@ -277,27 +343,27 @@ class ETFSharpStrategy(BaseStrategy):
         """
         if not selected:
             return {}
-        
+
         if self.p.weighting_method == 'equal':
-            weight_per_asset = 0.95 / len(selected)
+            weight_per_asset = self.p.max_position_pct / len(selected)
             return {symbol: weight_per_asset for symbol in selected}
-        
+
         elif self.p.weighting_method == 'score_weighted':
             positive_scores = {s: max(scores.get(s, 0), 0) for s in selected}
             total_score = sum(positive_scores.values())
-            
+
             if total_score <= 0:
-                weight_per_asset = 0.95 / len(selected)
+                weight_per_asset = self.p.max_position_pct / len(selected)
                 return {symbol: weight_per_asset for symbol in selected}
-            
+
             weights = {}
             for symbol in selected:
-                weights[symbol] = 0.95 * positive_scores[symbol] / total_score
-            
+                weights[symbol] = self.p.max_position_pct * positive_scores[symbol] / total_score
+
             return weights
-        
+
         else:
-            weight_per_asset = 0.95 / len(selected)
+            weight_per_asset = self.p.max_position_pct / len(selected)
             return {symbol: weight_per_asset for symbol in selected}
     
     def _initial_rebalance(self):
@@ -310,8 +376,8 @@ class ETFSharpStrategy(BaseStrategy):
             self.log("无法计算因子得分，跳过初始建仓")
             return
         
-        selected = self._select_assets(scores)
-        
+        selected = self._select_assets(scores, is_initial=True)
+
         if not selected:
             self.log("没有符合条件的资产，跳过初始建仓")
             return
@@ -354,17 +420,17 @@ class ETFSharpStrategy(BaseStrategy):
     def _rebalance(self):
         """执行再平衡"""
         self.log("开始执行再平衡...")
-        
+
         scores = self._compute_scores()
-        
+
         if not scores:
             self.log("无法计算因子得分，跳过再平衡")
             return
-        
+
         self.log(f"因子得分: {scores}")
-        
+
         selected = self._select_assets(scores)
-        
+
         if not selected:
             self.log("没有符合条件的资产，清仓")
             for data in self.datas:
@@ -372,27 +438,53 @@ class ETFSharpStrategy(BaseStrategy):
                 if position.size > 0:
                     self._order_target_percent(data=data, target=0)
             return
-        
+
         weights = self._calculate_weights(selected, scores)
-        
-        rebalance_info = []
-        
+
+        # 计算当前权重和目标权重
+        total_value = self.broker.getvalue()
+        weight_changes = []
         for data in self.datas:
             symbol = data._name if hasattr(data, '_name') else 'unknown'
             position = self.getposition(data)
-            
+
             current_weight = 0.0
             if position.size > 0:
-                total_value = self.broker.getvalue()
                 market_value = position.size * data.close[0]
                 current_weight = market_value / total_value
-            
+
             target_weight = weights.get(symbol, 0.0)
-            score = scores.get(symbol, 0)
-            
+            weight_changes.append({
+                'data': data,
+                'symbol': symbol,
+                'current_weight': current_weight,
+                'target_weight': target_weight,
+                'score': scores.get(symbol, 0),
+            })
+
+        # 换手率限制：大调仓时分阶段执行，模拟 buggy 版本的动态现金缓冲效果
+        if self.p.max_turnover_pct > 0:
+            raw_turnover = sum(abs(wc['current_weight'] - wc['target_weight']) for wc in weight_changes) / 2.0
+            if raw_turnover > self.p.max_turnover_pct:
+                scale = self.p.max_turnover_pct / raw_turnover
+                self.log(f"换手率限制生效: 原始换手率 {raw_turnover:.2%}, 限制 {self.p.max_turnover_pct:.2%}, 缩放系数 {scale:.2f}")
+                for wc in weight_changes:
+                    wc['target_weight'] = wc['current_weight'] + scale * (wc['target_weight'] - wc['current_weight'])
+
+        rebalance_info = []
+        sell_orders = []
+        buy_orders = []
+
+        for wc in weight_changes:
+            data = wc['data']
+            symbol = wc['symbol']
+            current_weight = wc['current_weight']
+            target_weight = wc['target_weight']
+            score = wc['score']
+
             asset_info = ASSET_CONFIG.get(symbol, {})
             asset_name = asset_info.get('name', symbol)
-            
+
             rebalance_info.append({
                 'symbol': symbol,
                 'name': asset_name,
@@ -400,8 +492,12 @@ class ETFSharpStrategy(BaseStrategy):
                 'target_weight': target_weight,
                 'score': score,
             })
-            
-            if abs(current_weight - target_weight) > 0.01:
+
+            if symbol in self._orders_today:
+                self.log(f"资产 {symbol} 今日已有订单，跳过再平衡")
+                continue
+
+            if abs(current_weight - target_weight) > self.p.min_rebalance_pct:
                 self.log_signal(
                     signal_type='rebalance',
                     data=data,
@@ -413,11 +509,21 @@ class ETFSharpStrategy(BaseStrategy):
                     },
                     confidence=min(1.0, (score + 2) / 4) if score else 0.5,
                 )
-                
-                self._order_target_percent(data=data, target=target_weight)
-        
+
+                if target_weight < current_weight:
+                    sell_orders.append((data, target_weight))
+                else:
+                    buy_orders.append((data, target_weight))
+
+        # 先卖出释放现金，再买入，避免 backtrader 同 bar 内保证金预审失败
+        for data, target in sell_orders:
+            self._order_target_percent(data=data, target=target)
+
+        for data, target in buy_orders:
+            self._order_target_percent(data=data, target=target)
+
         self.log("再平衡执行完成")
-        
+
         for info in rebalance_info:
             if info['target_weight'] > 0 or info['current_weight'] > 0:
                 self.log(
@@ -444,8 +550,11 @@ class ETFSharpStrategy(BaseStrategy):
         for data in self.datas:
             symbol = data._name if hasattr(data, '_name') else 'unknown'
             position = self.getposition(data)
-            
+
             if position.size <= 0:
+                continue
+
+            if symbol in self._orders_today:
                 continue
             
             current_price = data.close[0]

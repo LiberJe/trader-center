@@ -195,8 +195,8 @@ class BaseStrategy(bt.Strategy):
         symbol = order.data._name if hasattr(order.data, '_name') else 'unknown'
         action = 'buy' if order.isbuy() else 'sell'
         dt = self.datas[0].datetime.datetime(0)
-        order_key = id(order)
-        
+        order_key = str(order.ref)
+
         if order.status == order.Submitted:
             if order_key not in self._order_id_map:
                 order_log = self.trade_logger.log_order_submit(
