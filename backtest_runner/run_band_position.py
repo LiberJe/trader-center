@@ -24,11 +24,13 @@ def main():
 
     # 策略配置展示
     print("\n策略配置:")
-    print("  底仓比例: 80% (一次性买入并长期持有)")
-    print("  波段比例: 20% (用于波段操作)")
+    print("  底仓比例: 50% (一次性买入并长期持有)")
+    print("  波段比例: 50% (用于波段操作)")
     print("  均线周期: 60日")
     print("  定投批次: 5次 (跌破均线后分5批投入)")
-    print("  移动止盈: 5% (从最高点回撤5%触发卖出)")
+    print("  移动止盈: 动态收紧 (基础3%，BIAS≥8%→2%，≥10%→1.5%，≥12%→1%，确认期3bar)")
+    print("  BIAS加权: 启用 (时间+跌幅双重衰减)")
+    print("  杠杆系统: 0% (最大杠杆资金占总资金0%，年化利率3%)")
 
     # 股票池 - 红利低波ETF
     symbols = ["512890.SH"]
@@ -53,11 +55,33 @@ def main():
 
     # 策略参数
     strategy_params = {
-        'base_position_pct': 50,      # 底仓80%
+        'base_position_pct': 50,       # 底仓50%
         'ma_period': 60,               # 60日均线
         'dca_batches': 5,              # 分5批定投
-        'trailing_stop_pct': 5,        # 5%移动止盈
         'dca_interval': 5,             # 定投间隔天
+        'dca_trigger_bias': 0,         # 定投触发阈值，BIAS60 <= -3%才开始定投
+        'trailing_stop_pct': 3,        # 基础移动止盈3%
+        # 动态止盈参数
+        'use_dynamic_trailing_stop': True,  # 启用动态止盈
+        'trailing_tighten_bias_1': 8.0,     # BIAS≥8% 止盈收紧到2%
+        'trailing_tighten_stop_1': 2.0,
+        'trailing_tighten_bias_2': 10.0,    # BIAS≥10% 止盈收紧到1.5%
+        'trailing_tighten_stop_2': 1.5,
+        'trailing_tighten_bias_3': 12.0,    # BIAS≥12% 止盈收紧到1%
+        'trailing_tighten_stop_3': 1.0,
+        # 移动止盈激活参数
+        'trailing_activation_bars': 3,  # 突破均线后需站稳3个交易bar才启用移动止盈
+        # BIAS智能加权参数
+        'use_bias_weighting': True,    # 启用BIAS加权
+        'min_dca_weight': 1.0,         # 最小加仓权重1.0x
+        'max_dca_weight': 3.0,         # 最大加仓权重3.0x
+        'time_decay_days': 30,         # 时间衰减周期30个交易日
+        'time_factor_ratio': 0.4,      # 时间因子占比40%
+        'drop_factor_ratio': 0.6,      # 跌幅因子占比60%
+        'max_bias_ref': 20,            # 最大参考跌幅20%
+        # 杠杆系统参数
+        'max_leverage_pct': 0,         # 最大杠杆资金占总资金0%（关闭杠杆）
+        'leverage_interest_rate': 3.0, # 杠杆年化利率3%
     }
 
     print("\n回测参数:")
@@ -98,9 +122,8 @@ def main():
 
     # 风险指标
     print("\n风险指标:")
-    print(f"  最大回撤: {result.max_drawdown:.2%}")
-    print(f"  夏普比率: {result.sharpe_ratio:.2f}")
-    print(f"  索提诺比率: {result.sortino_ratio:.2f}")
+    print(f"  最大回撤: {result.calculate_max_drawdown():.2%}")
+    print(f"  夏普比率: {result.calculate_sharpe_ratio():.2f}")
 
     # 交易统计
     print("\n交易统计:")
@@ -121,48 +144,71 @@ def main():
             print(f"  {name}: {path}")
 
     # 打开报告
-    if result.report_path:
-        print(f"\n正在打开报告: {result.report_path}")
-        result.open_report()
+    report_path = result.log_files.get('performance_report')
+    if report_path:
+        print(f"\n正在打开报告: {report_path}")
+        import webbrowser
+        webbrowser.open(report_path)
 
     print("\n" + "=" * 60)
     print("策略说明")
     print("=" * 60)
     print("""
-该策略实现了分仓波段交易逻辑：
+该策略实现了分仓波段交易逻辑（BIAS智能加权 + 动态收紧回撤版）：
 
 1. 仓位分配
    - 底仓 (base_position_pct%): 回测开始时一次性买入并长期持有
    - 波段仓 (100% - base_position_pct%): 用于波段操作，高抛低吸
 
-2. 买入逻辑（波段仓）
-   - 当价格跌破60日均线时，触发定投买入信号
-   - 将波段资金分为多批(dca_batches)投入，降低择时风险
-   - 每批投入等额资金，买入股数为100的整数倍(A股规则)
+2. 买入逻辑（波段仓）- BIAS智能加权定投
+   - 当价格跌破60日均线，且BIAS60 <= -dca_trigger_bias%时，触发定投买入信号
+   - 加仓权重 = min_weight + (max_weight - min_weight) × (time_factor × time_ratio + drop_factor × drop_ratio)
+   - 时间因子: 跌破均线时间越长，加仓权重越高（基于交易bar数，按time_decay_days线性增长）
+   - 跌幅因子: BIAS60（乖离率）绝对值越大，加仓权重越高（基于当前跌幅/max_bias_ref计算）
+   - 单次加仓不超过剩余波段资金的50%，防止过早打光资金
 
-3. 卖出逻辑（波段仓）
-   - 当价格回到60日均线以上后，启用移动止盈机制
-   - 追踪持仓期间的最高价，记录最高点
-   - 当价格从最高点回撤超过设定比例(trailing_stop_pct%)时卖出
-   - 卖出后重置波段仓状态，等待下一次波段机会
+3. 卖出逻辑（波段仓）- 动态移动止盈
+   - 当价格回到60日均线以上后，进入“突破确认期”（trailing_activation_bars，默认3bar）
+   - 确认期内只追踪最高价，但不真正触发移动止盈，防止暴跌后的假突破被立刻洗出
+   - 确认期结束后，若价格从突破后的最高价回撤超过阈值，才执行卖出
+   - 基础回撤比例: trailing_stop_pct%（默认3%）
+   - 动态收紧: BIAS越高，止盈线越紧，避免大幅回吐利润
+     * BIAS >= 8%  → 止盈收紧到 2%
+     * BIAS >= 10% → 止盈收紧到 1.5%
+     * BIAS >= 12% → 止盈收紧到 1%
+   - 当价格从最高点回撤超过当前动态止盈比例时卖出
+   - 卖出后重置波段仓状态和BIAS计时，等待下一次波段机会
 
-4. 特殊模式
+4. BIAS加权参数说明
+   - use_bias_weighting: 是否启用BIAS加权，默认True
+   - min_dca_weight: 最小加仓权重，默认1.0x
+   - max_dca_weight: 最大加仓权重，默认3.0x
+   - time_decay_days: 时间衰减周期（交易bar数），默认30
+   - time_factor_ratio: 时间因子占比，默认40%
+   - drop_factor_ratio: 跌幅因子占比，默认60%
+   - max_bias_ref: 最大参考跌幅，默认20%
+
+5. 定投触发阈值
+   - dca_trigger_bias: 默认3.0%，即BIAS60跌破-3%才开始定投
+   - 作用: 避免小幅回踩均线就过早建仓，过滤无效震荡
+
+6. 杠杆系统说明
+   - max_leverage_pct: 最大杠杆资金占初始总资金百分比，默认20%
+   - leverage_interest_rate: 杠杆年化利率，默认3%
+   - 触发条件: 5份自有资金定投用完后，若价格仍在60日均线下方，启用杠杆加仓
+   - 还款条件: 波段仓移动止盈清仓时，从卖出回款中扣除杠杆本金+利息
+   - 计息方式: 杠杆启用日至清仓日之间的自然日天数 × 年化利率 / 365
+
+7. 特殊模式
    - 当 base_position_pct 设为 100% 时，策略退化为买入持有策略
-   - 此时所有资金一次性买入，不再进行波段操作
-   - 适用于长期看好标的、不希望频繁交易的场景
-
-5. 参数说明
-   - base_position_pct: 底仓比例，默认80% (范围: 0-100)
-   - ma_period: 移动平均线周期，默认60日 (范围: 5-250)
-   - dca_batches: 定投批次，默认5次 (范围: 1-20)
-   - trailing_stop_pct: 移动止盈比例，默认5% (范围: 1-20)
+   - 当 use_bias_weighting 设为 False 时，退化为等额定投模式
+   - 当 use_dynamic_trailing_stop 设为 False 时，退化为固定比例移动止盈
 
 扩展建议:
-- 可以尝试调整底仓比例，对比80%、90%、100%的表现差异
-- 可以修改均线周期(如30日、90日)，测试不同周期的效果
-- 可以增加止损逻辑，在跌破均线一定比例后止损而非定投
-- 可以尝试多标的组合，每只标的独立执行分仓策略
-- 可以加入择时过滤器，如大盘MACD为正时才开启波段操作
+- 可以尝试调整底仓比例，对比50%、80%、100%的表现差异
+- 可以调整max_dca_weight和因子占比，测试不同激进程度的效果
+- 可以修改动态止盈档位阈值，对比不同收紧速度的绩效差异
+- 可以对比加权定投 vs 等额定投的绩效差异
 """)
 
 
