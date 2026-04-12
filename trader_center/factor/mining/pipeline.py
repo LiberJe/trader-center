@@ -20,6 +20,11 @@ from trader_center.factor.mining.alphalens_adapter import AlphalensAdapter, chec
 from trader_center.factor.mining.visualization import FactorVisualizer
 from trader_center.factor.mining.scoring import FactorScorer, compute_monotonicity
 from trader_center.factor.mining.report import FactorReport
+from trader_center.factor.mining.turnover import TurnoverAnalyzer
+from trader_center.factor.mining.grouped_ic import GroupedICAnalyzer
+from trader_center.factor.mining.decay import DecayAnalyzer
+from trader_center.factor.mining.robustness import RobustnessTester
+from trader_center.factor.mining.alpha_beta import AlphaBetaAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -180,6 +185,11 @@ class FactorAnalysisPipeline:
             analysis_result = self._analyze_with_alphalens(
                 factor_processed, price_df, show_plots
             )
+            # 添加额外的分析
+            additional_analysis = self._analyze_additional(
+                factor_processed, price_df
+            )
+            analysis_result.update(additional_analysis)
         else:
             analysis_result = self._analyze_with_builtin(
                 factor_processed, price_df
@@ -389,6 +399,58 @@ class FactorAnalysisPipeline:
         
         return analysis_result
     
+    def _analyze_additional(
+        self,
+        factor_df: pd.DataFrame,
+        price_df: pd.DataFrame,
+    ) -> Dict:
+        """
+        添加额外的分析结果
+        
+        Args:
+            factor_df: 因子数据
+            price_df: 价格数据
+        
+        Returns:
+            额外分析结果字典
+        """
+        forward_returns = price_df.pct_change().shift(-1)
+        
+        # 换手率分析
+        turnover_analyzer = TurnoverAnalyzer()
+        turnover_result = turnover_analyzer.compute_factor_turnover(factor_df)
+        
+        # 分组IC分析
+        grouped_ic_analyzer = GroupedICAnalyzer()
+        # 由于没有行业数据，这里跳过分组IC分析
+        grouped_ic_result = {}
+        
+        # 因子衰减分析
+        decay_analyzer = DecayAnalyzer()
+        decay_result = decay_analyzer.compute_ic_decay(factor_df, forward_returns)
+        
+        # 稳健性测试
+        robustness_tester = RobustnessTester()
+        # 使用时间周期测试作为稳健性测试
+        robustness_result = robustness_tester.test_by_time_period(factor_df, forward_returns)
+        
+        # Alpha/Beta分析
+        alpha_beta_analyzer = AlphaBetaAnalyzer()
+        # 计算因子收益
+        factor_returns = alpha_beta_analyzer.compute_factor_returns(factor_df, forward_returns)
+        # 创建简单的基准收益（市场平均）
+        benchmark_returns = forward_returns.mean(axis=1)
+        # 计算Alpha和Beta
+        alpha_beta_result = alpha_beta_analyzer.compute_factor_alpha_beta(factor_returns, benchmark_returns)
+        
+        return {
+            'turnover': turnover_result,
+            'grouped_ic': grouped_ic_result,
+            'decay': decay_result,
+            'robustness': robustness_result,
+            'alpha_beta': alpha_beta_result,
+        }
+    
     def _analyze_with_builtin(
         self,
         factor_df: pd.DataFrame,
@@ -420,6 +482,9 @@ class FactorAnalysisPipeline:
         )
         layering_result = layering_analyzer.compute(factor_df, forward_returns)
         
+        # 添加额外分析
+        additional_analysis = self._analyze_additional(factor_df, price_df)
+        
         summary = {
             'ic_mean': ic_result['ic_mean'],
             'ic_std': ic_result['ic_std'],
@@ -435,12 +500,15 @@ class FactorAnalysisPipeline:
             if ls_returns.std() > 0:
                 summary['factor_sharpe'] = ls_returns.mean() / ls_returns.std()
         
-        return {
+        result = {
             'ic': ic_result,
             'layering': layering_result,
             'summary': summary,
             'monotonicity': layering_analyzer.compute_monotonicity(),
         }
+        result.update(additional_analysis)
+        
+        return result
     
     def _generate_visualizations(
         self,
@@ -473,6 +541,77 @@ class FactorAnalysisPipeline:
                 factor_series, save_path=save_path
             )
             figures['distribution'] = fig
+        
+        # IC分析图表
+        ic_result = result.get('ic')
+        if ic_result:
+            save_path = str(figure_dir / f'{factor_name}_ic_series.png') if save_figures else None
+            fig = self.visualizer.plot_ic_series(
+                ic_result.get('ic_series', []), save_path=save_path
+            )
+            figures['ic_series'] = fig
+        
+        # 分层回测图表
+        layering_result = result.get('layering')
+        if layering_result:
+            save_path = str(figure_dir / f'{factor_name}_layering_returns.png') if save_figures else None
+            fig = self.visualizer.plot_layering_returns(
+                layering_result.get('group_returns', {}),
+                layering_result.get('long_short_returns', []),
+                save_path=save_path
+            )
+            figures['layering_returns'] = fig
+        
+        # 换手率图表
+        turnover_result = result.get('turnover')
+        if turnover_result is not None:
+            # 检查turnover_series是否存在
+            turnover_series = turnover_result.get('turnover_series') if isinstance(turnover_result, dict) else turnover_result
+            if turnover_series is not None and not (hasattr(turnover_series, 'empty') and turnover_series.empty):
+                save_path = str(figure_dir / f'{factor_name}_turnover.png') if save_figures else None
+                fig = self.visualizer.plot_turnover_series(
+                    turnover_series,
+                    save_path=save_path
+                )
+                figures['turnover'] = fig
+        
+        # 因子衰减图表
+        decay_result = result.get('decay')
+        if decay_result is not None:
+            # 检查decay_curve是否存在
+            decay_curve = decay_result.get('decay_curve') if isinstance(decay_result, dict) else decay_result
+            if decay_curve is not None and not (hasattr(decay_curve, 'empty') and decay_curve.empty):
+                save_path = str(figure_dir / f'{factor_name}_decay.png') if save_figures else None
+                fig = self.visualizer.plot_decay_curve(
+                    decay_curve,
+                    save_path=save_path
+                )
+                figures['decay'] = fig
+        
+        # 稳健性测试图表
+        robustness_result = result.get('robustness')
+        if robustness_result is not None:
+            # 检查regime_results是否存在
+            regime_results = robustness_result.get('regime_results') if isinstance(robustness_result, dict) else robustness_result
+            if regime_results is not None and isinstance(regime_results, dict) and regime_results:
+                save_path = str(figure_dir / f'{factor_name}_robustness.png') if save_figures else None
+                fig = self.visualizer.plot_robustness_analysis(
+                    regime_results,
+                    save_path=save_path
+                )
+                figures['robustness'] = fig
+        
+        # Alpha/Beta分析图表
+        alpha_beta_result = result.get('alpha_beta')
+        if alpha_beta_result is not None and isinstance(alpha_beta_result, dict):
+            save_path = str(figure_dir / f'{factor_name}_alpha_beta.png') if save_figures else None
+            fig = self.visualizer.plot_alpha_beta_analysis(
+                alpha_beta_result.get('alpha', 0),
+                alpha_beta_result.get('beta', 0),
+                alpha_beta_result.get('information_ratio', 0),
+                save_path=save_path
+            )
+            figures['alpha_beta'] = fig
         
         return figures
     

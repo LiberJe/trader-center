@@ -41,23 +41,31 @@ class FactorScorer:
         sharpe_threshold: float = 1.0,
         monotonicity_threshold: float = 0.5,
         correlation_threshold: float = 0.3,
+        turnover_threshold: float = 0.1,
+        half_life_threshold: float = 10,
     ):
         """
         初始化因子评分器
         
         Args:
-            weights: 各维度权重，默认 {'ic': 0.3, 'return': 0.3, 'stability': 0.2, 'independence': 0.2}
+            weights: 各维度权重，默认包含新增的换手率、稳健性和衰减速度维度
             ic_threshold: IC有效阈值
             icir_threshold: ICIR有效阈值
             sharpe_threshold: 夏普比率阈值
             monotonicity_threshold: 单调性阈值
             correlation_threshold: 相关性阈值
+            turnover_threshold: 换手率阈值
+            half_life_threshold: 半衰期阈值
         """
         self.weights = weights or {
-            'ic': 0.3,
-            'return': 0.3,
-            'stability': 0.2,
-            'independence': 0.2,
+            'ic': 0.20,           # IC有效性
+            'return': 0.20,       # 收益贡献
+            'stability': 0.15,    # 稳定性
+            'independence': 0.10, # 独立性
+            'turnover': 0.10,     # 换手率（新增）
+            'robustness': 0.10,   # 稳健性（新增）
+            'decay': 0.10,        # 衰减速度（新增）
+            'monotonicity': 0.05, # 单调性
         }
         
         self.ic_threshold = ic_threshold
@@ -65,6 +73,8 @@ class FactorScorer:
         self.sharpe_threshold = sharpe_threshold
         self.monotonicity_threshold = monotonicity_threshold
         self.correlation_threshold = correlation_threshold
+        self.turnover_threshold = turnover_threshold
+        self.half_life_threshold = half_life_threshold
         
         self._validate_weights()
     
@@ -97,6 +107,15 @@ class FactorScorer:
                     'factor_return_mean': 0.02,
                     'factor_sharpe': 1.5,
                     'ic_positive_ratio': 0.6,
+                },
+                'turnover': {
+                    'mean_turnover': 0.08,
+                },
+                'robustness': {
+                    'robustness_score': 0.8,
+                },
+                'decay': {
+                    'half_life': 15,
                 }
             }
             score = scorer.score(result)
@@ -111,11 +130,24 @@ class FactorScorer:
         
         independence_score = self._score_independence(correlation_with_others)
         
+        turnover_score = self._score_turnover(analysis_result)
+        
+        robustness_score = self._score_robustness(analysis_result)
+        
+        decay_score = self._score_decay(analysis_result)
+        
+        monotonicity = analysis_result.get('monotonicity', 0)
+        monotonicity_score = self._score_monotonicity(monotonicity)
+        
         total_score = (
             ic_score * self.weights['ic'] +
             return_score * self.weights['return'] +
             stability_score * self.weights['stability'] +
-            independence_score * self.weights['independence']
+            independence_score * self.weights['independence'] +
+            turnover_score * self.weights['turnover'] +
+            robustness_score * self.weights['robustness'] +
+            decay_score * self.weights['decay'] +
+            monotonicity_score * self.weights['monotonicity']
         )
         
         grade = self._get_grade(total_score)
@@ -125,9 +157,121 @@ class FactorScorer:
             'return_score': return_score,
             'stability_score': stability_score,
             'independence_score': independence_score,
+            'turnover_score': turnover_score,
+            'robustness_score': robustness_score,
+            'decay_score': decay_score,
+            'monotonicity_score': monotonicity_score,
             'total_score': total_score,
             'grade': grade,
         }
+    
+    def _score_turnover(self, analysis_result: Dict) -> float:
+        """
+        计算换手率评分
+        
+        评分标准:
+        - 日换手率 < 10%: 1.0分
+        - 日换手率 10%-20%: 0.8分
+        - 日换手率 20%-30%: 0.6分
+        - 日换手率 30%-50%: 0.4分
+        - 日换手率 > 50%: 0.2分
+        
+        Args:
+            analysis_result: 分析结果字典
+        
+        Returns:
+            换手率得分 (0-1)
+        """
+        turnover_data = analysis_result.get('turnover', {})
+        mean_turnover = turnover_data.get('mean_turnover', 0.5)
+        
+        if mean_turnover < 0.1:
+            return 1.0
+        elif mean_turnover < 0.2:
+            return 0.8
+        elif mean_turnover < 0.3:
+            return 0.6
+        elif mean_turnover < 0.5:
+            return 0.4
+        else:
+            return 0.2
+    
+    def _score_robustness(self, analysis_result: Dict) -> float:
+        """
+        计算稳健性评分
+        
+        评分标准:
+        - 所有子样本IC同方向且显著: 1.0分
+        - 多数子样本IC同方向: 0.7分
+        - 子样本表现分化: 0.4分
+        - 子样本方向不一致: 0.1分
+        
+        Args:
+            analysis_result: 分析结果字典
+        
+        Returns:
+            稳健性得分 (0-1)
+        """
+        robustness_data = analysis_result.get('robustness', {})
+        robustness_score = robustness_data.get('robustness_score', 0.5)
+        
+        if robustness_score >= 0.8:
+            return 1.0
+        elif robustness_score >= 0.6:
+            return 0.7
+        elif robustness_score >= 0.4:
+            return 0.4
+        else:
+            return 0.1
+    
+    def _score_decay(self, analysis_result: Dict) -> float:
+        """
+        计算衰减速度评分
+        
+        评分标准:
+        - 半衰期 > 20日: 1.0分
+        - 半衰期 10-20日: 0.7分
+        - 半衰期 5-10日: 0.4分
+        - 半衰期 < 5日: 0.1分
+        
+        Args:
+            analysis_result: 分析结果字典
+        
+        Returns:
+            衰减速度得分 (0-1)
+        """
+        decay_data = analysis_result.get('decay', {})
+        half_life = decay_data.get('half_life', 10)
+        
+        if half_life > 20:
+            return 1.0
+        elif half_life >= 10:
+            return 0.7
+        elif half_life >= 5:
+            return 0.4
+        else:
+            return 0.1
+    
+    def _score_monotonicity(self, monotonicity: float) -> float:
+        """
+        计算单调性评分
+        
+        Args:
+            monotonicity: 单调性值
+        
+        Returns:
+            单调性得分 (0-1)
+        """
+        if abs(monotonicity) >= 0.8:
+            return 1.0
+        elif abs(monotonicity) >= 0.6:
+            return 0.8
+        elif abs(monotonicity) >= 0.4:
+            return 0.6
+        elif abs(monotonicity) >= 0.2:
+            return 0.4
+        else:
+            return 0.2
     
     def _score_ic(self, summary: Dict) -> float:
         """

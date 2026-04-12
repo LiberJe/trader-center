@@ -84,9 +84,68 @@ class FactorReport:
         """
         if pd.isna(value):
             return 'N/A'
+        if isinstance(value, str):
+            return value
         if isinstance(value, (int, np.integer)):
             return str(value)
-        return f"{value:{format_str}}"
+        try:
+            return f"{value:{format_str}}"
+        except (ValueError, TypeError):
+            return str(value)
+    
+    def _generate_recommendations(self, analysis_result: Dict, score: Dict) -> str:
+        """
+        生成因子建议
+        
+        Args:
+            analysis_result: 分析结果
+            score: 评分结果
+        
+        Returns:
+            建议文本
+        """
+        recommendations = []
+        
+        # 基于评分给出建议
+        total_score = score.get('total_score', 0)
+        
+        if total_score >= 0.8:
+            recommendations.append("• 因子表现优秀，建议优先考虑纳入投资组合")
+        elif total_score >= 0.6:
+            recommendations.append("• 因子表现良好，可以考虑纳入投资组合")
+        else:
+            recommendations.append("• 因子表现一般，建议谨慎使用")
+        
+        # 基于IC分析给出建议
+        ic_mean = analysis_result.get('ic', {}).get('ic_mean', 0)
+        if ic_mean > 0.05:
+            recommendations.append("• 因子预测能力较强，适合作为主要因子")
+        elif ic_mean > 0.02:
+            recommendations.append("• 因子预测能力适中，可以作为辅助因子")
+        else:
+            recommendations.append("• 因子预测能力较弱，建议结合其他因子使用")
+        
+        # 基于换手率给出建议
+        turnover = analysis_result.get('turnover')
+        if turnover is not None:
+            if hasattr(turnover, 'mean'):
+                avg_turnover = turnover.mean()
+                if avg_turnover > 0.3:
+                    recommendations.append("• 换手率较高，可能增加交易成本")
+                elif avg_turnover < 0.1:
+                    recommendations.append("• 换手率较低，适合长期持有")
+        
+        # 基于衰减分析给出建议
+        decay = analysis_result.get('decay')
+        if decay is not None and isinstance(decay, dict):
+            optimal_period = decay.get('optimal_holding_period')
+            if optimal_period:
+                recommendations.append(f"• 建议持仓周期：{optimal_period}天")
+        
+        if not recommendations:
+            return "暂无具体建议"
+        
+        return ' '.join(recommendations)
     
     def generate(
         self,
@@ -186,7 +245,7 @@ class FactorReport:
             
             score_html = f'''
             <div class="score-section">
-                <h2>综合评分</h2>
+                <h2>8. 综合评分</h2>
                 <div class="score-card">
                     <div class="total-score">
                         <span class="score-value">{score.get('total_score', 0):.2f}</span>
@@ -209,6 +268,22 @@ class FactorReport:
                             <span>独立性</span>
                             <span>{score.get('independence_score', 0):.2f}</span>
                         </div>
+                        <div class="score-item">
+                            <span>换手率</span>
+                            <span>{score.get('turnover_score', 0):.2f}</span>
+                        </div>
+                        <div class="score-item">
+                            <span>稳健性</span>
+                            <span>{score.get('robustness_score', 0):.2f}</span>
+                        </div>
+                        <div class="score-item">
+                            <span>衰减速度</span>
+                            <span>{score.get('decay_score', 0):.2f}</span>
+                        </div>
+                        <div class="score-item">
+                            <span>单调性</span>
+                            <span>{score.get('monotonicity_score', 0):.2f}</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -216,10 +291,139 @@ class FactorReport:
         
         metadata_html = ''
         if metadata:
-            metadata_html = '<div class="metadata-section"><h2>因子信息</h2><table class="info-table">'
+            metadata_html = '<div class="metadata-section"><h2>1. 因子概览</h2><table class="info-table">'
             for key, value in metadata.items():
                 metadata_html += f'<tr><td>{key}</td><td>{value}</td></tr>'
             metadata_html += '</table></div>'
+        
+        # 构建各章节内容
+        ic_analysis_html = f'''
+        <div class="ic-analysis-section">
+            <h2>2. IC分析</h2>
+            <div class="summary-grid">
+                <div class="summary-item">
+                    <div class="label">IC均值</div>
+                    <div class="value {'positive' if summary.get('ic_mean', 0) > 0 else 'negative'}">{self._format_value(summary.get('ic_mean'))}</div>
+                </div>
+                <div class="summary-item">
+                    <div class="label">ICIR</div>
+                    <div class="value {'positive' if summary.get('icir', 0) > 0 else 'negative'}">{self._format_value(summary.get('icir'))}</div>
+                </div>
+                <div class="summary-item">
+                    <div class="label">IC>0比例</div>
+                    <div class="value">{self._format_value(summary.get('ic_positive_ratio'), '.2%')}</div>
+                </div>
+                <div class="summary-item">
+                    <div class="label">IC显著比例</div>
+                    <div class="value">{self._format_value(summary.get('ic_significant_ratio'), '.2%')}</div>
+                </div>
+            </div>
+        </div>
+        '''
+        
+        layering_html = f'''
+        <div class="layering-section">
+            <h2>3. 分层回测分析</h2>
+            <div class="summary-grid">
+                <div class="summary-item">
+                    <div class="label">因子收益均值</div>
+                    <div class="value {'positive' if summary.get('factor_return_mean', 0) > 0 else 'negative'}">{self._format_value(summary.get('factor_return_mean'))}</div>
+                </div>
+                <div class="summary-item">
+                    <div class="label">因子夏普</div>
+                    <div class="value {'positive' if summary.get('factor_sharpe', 0) > 0 else 'negative'}">{self._format_value(summary.get('factor_sharpe'))}</div>
+                </div>
+                <div class="summary-item">
+                    <div class="label">多空收益</div>
+                    <div class="value {'positive' if summary.get('long_short_return', 0) > 0 else 'negative'}">{self._format_value(summary.get('long_short_return'))}</div>
+                </div>
+                <div class="summary-item">
+                    <div class="label">单调性</div>
+                    <div class="value {'positive' if analysis_result.get('monotonicity', 0) > 0 else 'negative'}">{self._format_value(analysis_result.get('monotonicity'))}</div>
+                </div>
+            </div>
+        </div>
+        '''
+        
+        decay_html = f'''
+        <div class="decay-section">
+            <h2>4. 因子衰减分析</h2>
+            <div class="summary-grid">
+                <div class="summary-item">
+                    <div class="label">最优持仓周期</div>
+                    <div class="value">{analysis_result.get('decay', {}).get('optimal_holding_period', 'N/A')}天</div>
+                </div>
+                <div class="summary-item">
+                    <div class="label">IC半衰期</div>
+                    <div class="value">{self._format_value(analysis_result.get('decay', {}).get('half_life', 'N/A'))}天</div>
+                </div>
+                <div class="summary-item">
+                    <div class="label">衰减速度评分</div>
+                    <div class="value">{self._format_value(score.get('decay_score', 0))}</div>
+                </div>
+            </div>
+        </div>
+        '''
+        
+        robustness_html = f'''
+        <div class="robustness-section">
+            <h2>5. 稳健性测试</h2>
+            <div class="summary-grid">
+                <div class="summary-item">
+                    <div class="label">稳健性得分</div>
+                    <div class="value">{self._format_value(analysis_result.get('robustness', {}).get('robustness_score', 'N/A'))}</div>
+                </div>
+                <div class="summary-item">
+                    <div class="label">稳健性评分</div>
+                    <div class="value">{self._format_value(score.get('robustness_score', 0))}</div>
+                </div>
+            </div>
+        </div>
+        '''
+        
+        alpha_beta_html = f'''
+        <div class="alpha-beta-section">
+            <h2>6. Alpha/Beta分析</h2>
+            <div class="summary-grid">
+                <div class="summary-item">
+                    <div class="label">年化Alpha</div>
+                    <div class="value {'positive' if analysis_result.get('alpha_beta', {}).get('alpha', 0) > 0 else 'negative'}">{self._format_value(analysis_result.get('alpha_beta', {}).get('alpha', 'N/A'))}</div>
+                </div>
+                <div class="summary-item">
+                    <div class="label">Beta</div>
+                    <div class="value">{self._format_value(analysis_result.get('alpha_beta', {}).get('beta', 'N/A'))}</div>
+                </div>
+                <div class="summary-item">
+                    <div class="label">信息比率</div>
+                    <div class="value {'positive' if analysis_result.get('alpha_beta', {}).get('information_ratio', 0) > 0 else 'negative'}">{self._format_value(analysis_result.get('alpha_beta', {}).get('information_ratio', 'N/A'))}</div>
+                </div>
+                <div class="summary-item">
+                    <div class="label">特雷诺比率</div>
+                    <div class="value {'positive' if analysis_result.get('alpha_beta', {}).get('treynor_ratio', 0) > 0 else 'negative'}">{self._format_value(analysis_result.get('alpha_beta', {}).get('treynor_ratio', 'N/A'))}</div>
+                </div>
+            </div>
+        </div>
+        '''
+        
+        correlation_html = f'''
+        <div class="correlation-section">
+            <h2>7. 相关性分析</h2>
+            <div class="summary-grid">
+                <div class="summary-item">
+                    <div class="label">独立性评分</div>
+                    <div class="value">{self._format_value(score.get('independence_score', 0))}</div>
+                </div>
+            </div>
+        </div>
+        '''
+        
+        conclusion_html = f'''
+        <div class="conclusion">
+            <h2>9. 结论与建议</h2>
+            <p>{self._generate_conclusion(factor_name, summary, score)}</p>
+            <p>{self._generate_recommendations(analysis_result, score)}</p>
+        </div>
+        '''
         
         html = f'''
 <!DOCTYPE html>
@@ -257,7 +461,7 @@ class FactorReport:
         }}
         h2 {{
             color: #34495e;
-            margin-top: 30px;
+            margin-top: 40px;
             margin-bottom: 15px;
             border-left: 4px solid #3498db;
             padding-left: 10px;
@@ -266,7 +470,7 @@ class FactorReport:
             color: #555;
             margin: 15px 0 10px 0;
         }}
-        .summary-section {{
+        .summary-section, .ic-analysis-section, .layering-section, .decay-section, .robustness-section, .alpha-beta-section, .correlation-section {{
             background-color: #f8f9fa;
             border-radius: 8px;
             padding: 20px;
@@ -382,16 +586,22 @@ class FactorReport:
         .conclusion {{
             background-color: #e8f4f8;
             border-left: 4px solid #3498db;
-            padding: 15px;
+            padding: 20px;
             margin: 20px 0;
         }}
+        .conclusion h2 {{
+            margin-top: 0;
+        }}
         .footer {{
-            margin-top: 30px;
+            margin-top: 40px;
             padding-top: 20px;
             border-top: 1px solid #eee;
             text-align: center;
             color: #666;
             font-size: 14px;
+        }}
+        .figures-section {{
+            margin: 20px 0;
         }}
     </style>
 </head>
@@ -401,47 +611,26 @@ class FactorReport:
         
         {metadata_html}
         
-        {score_html}
+        {ic_analysis_html}
         
-        <div class="summary-section">
-            <h2>分析摘要</h2>
-            <div class="summary-grid">
-                <div class="summary-item">
-                    <div class="label">IC均值</div>
-                    <div class="value {'positive' if summary.get('ic_mean', 0) > 0 else 'negative'}">{self._format_value(summary.get('ic_mean'))}</div>
-                </div>
-                <div class="summary-item">
-                    <div class="label">ICIR</div>
-                    <div class="value {'positive' if summary.get('icir', 0) > 0 else 'negative'}">{self._format_value(summary.get('icir'))}</div>
-                </div>
-                <div class="summary-item">
-                    <div class="label">IC>0比例</div>
-                    <div class="value">{self._format_value(summary.get('ic_positive_ratio'), '.2%')}</div>
-                </div>
-                <div class="summary-item">
-                    <div class="label">因子收益均值</div>
-                    <div class="value {'positive' if summary.get('factor_return_mean', 0) > 0 else 'negative'}">{self._format_value(summary.get('factor_return_mean'))}</div>
-                </div>
-                <div class="summary-item">
-                    <div class="label">因子夏普</div>
-                    <div class="value {'positive' if summary.get('factor_sharpe', 0) > 0 else 'negative'}">{self._format_value(summary.get('factor_sharpe'))}</div>
-                </div>
-                <div class="summary-item">
-                    <div class="label">IC偏度</div>
-                    <div class="value">{self._format_value(summary.get('ic_skew'))}</div>
-                </div>
-            </div>
-        </div>
+        {layering_html}
+        
+        {decay_html}
+        
+        {robustness_html}
+        
+        {alpha_beta_html}
+        
+        {correlation_html}
+        
+        {score_html}
         
         <div class="figures-section">
             <h2>分析图表</h2>
             {figures_html}
         </div>
         
-        <div class="conclusion">
-            <h2>综合评价</h2>
-            <p>{self._generate_conclusion(factor_name, summary, score)}</p>
-        </div>
+        {conclusion_html}
         
         <div class="footer">
             <p>报告生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
