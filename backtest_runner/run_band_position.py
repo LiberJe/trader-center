@@ -104,7 +104,7 @@ def main():
         strategy=BandPositionStrategy,
         symbols=symbols,
         start="2020-01-01",
-        end="2026-04-10",
+        end="2024-12-31",
         initial_cash=config.initial_cash,
         strategy_params=strategy_params
     )

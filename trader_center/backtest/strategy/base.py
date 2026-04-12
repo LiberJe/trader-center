@@ -59,6 +59,8 @@ class BaseStrategy(bt.Strategy):
         self.orders: List[bt.Order] = []
         self.trades: List[Dict[str, Any]] = []
         self.closed_trades: List[Dict[str, Any]] = []
+        self._trade_records: List[Dict[str, Any]] = []  # 手动计算的交易闭环盈亏
+        self._position_lots: Dict[str, List[Dict[str, Any]]] = {}  # 按标的记录的买入批次(FIFO)
 
         self._buy_dates: Dict[str, datetime] = {}
         self._order_id_map: Dict[int, str] = {}
@@ -195,10 +197,10 @@ class BaseStrategy(bt.Strategy):
         symbol = order.data._name if hasattr(order.data, '_name') else 'unknown'
         action = 'buy' if order.isbuy() else 'sell'
         dt = self.datas[0].datetime.datetime(0)
-        order_key = id(order)
-        
+        order_ref = order.ref
+
         if order.status == order.Submitted:
-            if order_key not in self._order_id_map:
+            if order_ref not in self._order_id_map:
                 order_log = self.trade_logger.log_order_submit(
                     symbol=symbol,
                     action=action,
@@ -207,9 +209,9 @@ class BaseStrategy(bt.Strategy):
                     order_type='limit' if order.exectype == bt.Order.Limit else 'market',
                     dt=dt,
                 )
-                self._order_id_map[order_key] = order_log.order_id
+                self._order_id_map[order_ref] = order_log.order_id
             return
-        
+
         if order.status == order.Accepted:
             return
 
@@ -221,27 +223,72 @@ class BaseStrategy(bt.Strategy):
                 f"手续费={order.executed.comm:.2f}"
             )
 
+            exec_size = int(abs(order.executed.size))
+            exec_price = order.executed.price
+
+            # 记录逐笔订单
             self.trades.append({
                 'date': self.datas[0].datetime.date(0),
                 'action': action,
-                'price': order.executed.price,
-                'size': order.executed.size,
+                'price': exec_price,
+                'size': exec_size,
                 'value': order.executed.value,
                 'commission': order.executed.comm,
+                'symbol': symbol,
             })
 
-            if order_key in self._order_id_map:
+            if order_ref in self._order_id_map:
                 self.trade_logger.log_order_status(
-                    order_id=self._order_id_map[order_key],
+                    order_id=self._order_id_map[order_ref],
                     status='completed',
-                    executed_price=order.executed.price,
-                    executed_size=int(abs(order.executed.size)),
+                    executed_price=exec_price,
+                    executed_size=exec_size,
                     commission=order.executed.comm,
                 )
 
             if order.isbuy():
                 self._buy_dates[symbol] = self.datas[0].datetime.date(0)
                 self._position_entry_dates[symbol] = self.datas[0].datetime.date(0)
+                # 记录买入批次用于FIFO盈亏计算
+                self._position_lots.setdefault(symbol, []).append({
+                    'price': exec_price,
+                    'size': exec_size,
+                })
+            else:
+                # 卖出时按FIFO计算闭环交易盈亏
+                sell_size = exec_size
+                sell_price = exec_price
+                lots = self._position_lots.get(symbol, [])
+                total_commission = order.executed.comm
+
+                while sell_size > 0 and lots:
+                    lot = lots[0]
+                    matched_size = min(sell_size, lot['size'])
+                    cost = matched_size * lot['price']
+                    revenue = matched_size * sell_price
+                    pnl = revenue - cost
+                    # 将佣金按比例分摊到各笔记录（简化处理）
+                    comm_share = total_commission * (matched_size / exec_size) if exec_size > 0 else 0
+                    pnlcomm = pnl - comm_share
+
+                    self._trade_records.append({
+                        'date': self.datas[0].datetime.date(0),
+                        'symbol': symbol,
+                        'size': matched_size,
+                        'buy_price': lot['price'],
+                        'sell_price': sell_price,
+                        'pnl': pnl,
+                        'pnlcomm': pnlcomm,
+                        'commission': comm_share,
+                    })
+
+                    sell_size -= matched_size
+                    lot['size'] -= matched_size
+                    if lot['size'] <= 0:
+                        lots.pop(0)
+
+                if sell_size > 0:
+                    self.log(f"警告: 卖出数量超过已记录持仓 {symbol} 剩余{sell_size}股")
 
         elif order.status in [order.Canceled, order.Margin, order.Rejected]:
             status_name = {
@@ -249,12 +296,12 @@ class BaseStrategy(bt.Strategy):
                 order.Margin: 'margin',
                 order.Rejected: 'rejected',
             }.get(order.status, 'unknown')
-            
+
             self.log(f"订单失败: {status_name}")
-            
-            if order_key in self._order_id_map:
+
+            if order_ref in self._order_id_map:
                 self.trade_logger.log_order_status(
-                    order_id=self._order_id_map[order_key],
+                    order_id=self._order_id_map[order_ref],
                     status=status_name,
                     message=f"Order {status_name}",
                 )
@@ -347,4 +394,6 @@ class BaseStrategy(bt.Strategy):
             pandas DataFrame，包含 pnl 字段
         """
         import pandas as pd
-        return pd.DataFrame(self.closed_trades) if self.closed_trades else pd.DataFrame()
+        # 优先使用手动计算的闭环交易记录（适配始终持仓策略）
+        trades_source = self._trade_records if self._trade_records else self.closed_trades
+        return pd.DataFrame(trades_source) if trades_source else pd.DataFrame()
