@@ -87,6 +87,21 @@ class LayeringAnalyzer:
                    for i in range(self.n_groups)}
             })
         
+        if not group_returns_list:
+            self.group_returns_ = pd.DataFrame(
+                columns=['date'] + [f'group_{i}' for i in range(self.n_groups)]
+            ).set_index('date')
+            self.group_stats_ = pd.DataFrame()
+            empty_series = pd.Series(dtype=float)
+            return {
+                'group_returns': self.group_returns_,
+                'group_stats': self.group_stats_,
+                'long_short_returns': empty_series,
+                'long_short_mean': 0.0,
+                'long_short_std': 0.0,
+                'long_short_sharpe': 0.0,
+            }
+        
         self.group_returns_ = pd.DataFrame(group_returns_list).set_index('date')
         
         self._compute_group_stats()
