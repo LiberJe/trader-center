@@ -82,6 +82,12 @@ def main():
         # 杠杆系统参数
         'max_leverage_pct': 0,         # 最大杠杆资金占总资金0%（关闭杠杆）
         'leverage_interest_rate': 3.0, # 杠杆年化利率3%
+        # === 底仓动态减持参数（方案A）===
+        'enable_base_reduce': True,           # 是否启用底仓动态减持
+        'base_reduce_bias_threshold': 15.0,   # BIAS60 >= 此值触发减持（%）
+        'base_reduce_ratio': 0.5,             # 减持比例（相对初始底仓市值）
+        'base_reduce_min_hold': 0.5,          # 减持后最少保留比例（相对初始底仓市值）
+        'base_restore_bias_threshold': 0,   # BIAS60 <= 此值触发回补（%）
     }
 
     print("\n回测参数:")
@@ -98,7 +104,7 @@ def main():
         strategy=BandPositionStrategy,
         symbols=symbols,
         start="2020-01-01",
-        end="2024-12-31",
+        end="2026-04-10",
         initial_cash=config.initial_cash,
         strategy_params=strategy_params
     )

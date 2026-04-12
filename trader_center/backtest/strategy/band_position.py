@@ -102,6 +102,13 @@ class BandPositionStrategy(BaseStrategy):
 
         # === 移动止盈激活参数 ===
         ('trailing_activation_bars', 3),       # 突破确认期（交易bar数），上穿均线后需站稳该时长才启用移动止盈
+
+        # === 底仓动态减持参数（方案A）===
+        ('enable_base_reduce', True),           # 是否启用底仓动态减持
+        ('base_reduce_bias_threshold', 15.0),   # BIAS60 >= 此值触发减持（%）
+        ('base_reduce_ratio', 0.3),             # 减持比例（相对初始底仓市值）
+        ('base_reduce_min_hold', 0.3),          # 减持后最少保留比例（相对初始底仓市值）
+        ('base_restore_bias_threshold', 5.0),   # BIAS60 <= 此值触发回补（%）
     )
 
     def __init__(self):
@@ -133,6 +140,8 @@ class BandPositionStrategy(BaseStrategy):
         # 记录底仓信息
         self.base_position_size = 0           # 底仓股数
         self.base_position_price = 0          # 底仓买入价格
+        self.initial_base_target_value = 0    # 初始底仓目标市值
+        self.base_reduced = False             # 底仓是否已减持
 
         # === BIAS加权加仓状态变量 ===
         self.first_below_ma_date = None       # 首次跌破均线日期（用于时间因子计算）
@@ -152,8 +161,9 @@ class BandPositionStrategy(BaseStrategy):
             leverage_info = ""
             if self.leverage_used > 0:
                 leverage_info = f" | 杠杆已用{self.leverage_used:.2f}"
+            reduce_info = "[已减持] " if self.base_reduced else ""
             self.log(
-                f'分仓状态: 底仓{self.p.base_position_pct}%({self.base_position_size}股) | '
+                f'分仓状态: {reduce_info}底仓{self.p.base_position_pct}%({self.base_position_size}股) | '
                 f'波段{self.band_position_pct}% 可用资金:{self.band_cash_available:.2f} | '
                 f'波段持仓:{self.band_position_size}股 成本:{self.band_position_cost:.3f} | '
                 f'60日均线:{self.ma60[0]:.3f}{leverage_info}'
@@ -169,6 +179,7 @@ class BandPositionStrategy(BaseStrategy):
 
         # 记录初始总资金并计算杠杆额度
         self.initial_total_cash = total_cash
+        self.initial_base_target_value = total_cash * self.p.base_position_pct / 100
         self.leverage_available = self.initial_total_cash * self.p.max_leverage_pct / 100
 
         # 计算每批定投金额
@@ -202,11 +213,18 @@ class BandPositionStrategy(BaseStrategy):
         if self.p.max_leverage_pct > 0:
             leverage_info = f' | 杠杆额度{self.leverage_available:.2f}(利率{self.p.leverage_interest_rate:.1f}%)'
 
+        reduce_info = ""
+        if self.p.enable_base_reduce:
+            reduce_info = (
+                f' | 底仓减持: BIAS≥{self.p.base_reduce_bias_threshold}% 减{self.p.base_reduce_ratio:.0%} '
+                f'保留≥{self.p.base_reduce_min_hold:.0%} 回补BIAS≤{self.p.base_restore_bias_threshold}%'
+            )
+
         self.log(
             f'策略启动: 总资金{total_cash:.2f} | '
             f'底仓比例{self.p.base_position_pct}% | 波段比例{self.band_position_pct}% | '
             f'波段资金{self.band_cash_available:.2f} 分{self.p.dca_batches}批投入 | '
-            f'定投间隔{self.p.dca_interval}个交易日{trigger_info}{ts_info}{bias_info}{leverage_info}'
+            f'定投间隔{self.p.dca_interval}个交易日{trigger_info}{ts_info}{bias_info}{leverage_info}{reduce_info}'
         )
 
     def next(self):
@@ -257,7 +275,11 @@ class BandPositionStrategy(BaseStrategy):
             self.first_below_ma_bar = len(self)
             self.log(f'BIAS状态: 首次跌破均线，当前BIAS={current_bias:.2f}%，开始计时加仓周期')
 
-        # ========== 第三步：波段仓操作 ==========
+        # ========== 第三步：底仓动态减持管理（方案A）==========
+        if self.p.enable_base_reduce and self.base_position_size > 0:
+            self._manage_base_position(current_price, current_bias)
+
+        # ========== 第四步：波段仓操作 ==========
 
         # 情况1：跌破均线且满足加仓条件，执行定投买入
         # 检查是否达到定投间隔交易日
@@ -596,6 +618,87 @@ class BandPositionStrategy(BaseStrategy):
         # 重置BIAS加仓状态，为下一次波段做准备
         self._reset_bias_state()
 
+    def _manage_base_position(self, current_price, current_bias):
+        """底仓动态减持管理（方案A）
+
+        当BIAS60极端高估时，部分减持底仓，卖出资金归入波段池。
+        当BIAS回落至阈值以下或跌破均线时，逐步回补底仓。
+        """
+        if not self.p.enable_base_reduce or self.initial_base_target_value <= 0:
+            return
+
+        current_base_value = self.base_position_size * current_price
+        min_hold_value = self.initial_base_target_value * self.p.base_reduce_min_hold
+
+        # 触发减持：BIAS60 >= threshold，且未减持过
+        if not self.base_reduced and current_bias >= self.p.base_reduce_bias_threshold:
+            target_reduce_value = self.initial_base_target_value * self.p.base_reduce_ratio
+            max_reduce_value = current_base_value - min_hold_value
+            actual_reduce_value = min(target_reduce_value, max_reduce_value)
+
+            if actual_reduce_value > 0:
+                reduce_size = int(actual_reduce_value / current_price / 100) * 100
+                if reduce_size > 0 and reduce_size <= self.base_position_size:
+                    order = self.sell(size=reduce_size)
+                    self.base_position_size -= reduce_size
+                    self.base_reduced = True
+                    sale_amount = reduce_size * current_price
+                    self.band_cash_available += sale_amount
+                    self.log(
+                        f'底仓减持: 卖出{reduce_size}股 @ {current_price:.3f}，金额{sale_amount:.2f} | '
+                        f'BIAS60={current_bias:.2f}% | 剩余底仓{self.base_position_size}股 | '
+                        f'波段资金增加至{self.band_cash_available:.2f}'
+                    )
+                    self.log_signal(
+                        signal_type='sell',
+                        data=self.data,
+                        trigger_condition=f'底仓动态减持: BIAS60={current_bias:.2f}% >= {self.p.base_reduce_bias_threshold}%',
+                        indicator_values={
+                            'close': current_price,
+                            'ma60': self.ma60[0],
+                            'bias60': current_bias,
+                            'base_reduce_size': reduce_size,
+                            'base_reduce_amount': sale_amount,
+                            'base_position_remaining': self.base_position_size,
+                            'band_cash_available': self.band_cash_available,
+                        },
+                        confidence=0.75,
+                    )
+            return
+
+        # 触发回补：已减持，且价格跌破均线或BIAS回落至restore阈值以下
+        if self.base_reduced and (self.below_ma or current_bias <= self.p.base_restore_bias_threshold):
+            target_size = int(self.initial_base_target_value / current_price / 100) * 100
+            missing_size = target_size - self.base_position_size
+
+            if missing_size > 0:
+                buy_amount = missing_size * current_price
+                if buy_amount <= self.band_cash_available:
+                    order = self.buy(size=missing_size)
+                    self.base_position_size += missing_size
+                    self.base_reduced = False
+                    self.band_cash_available -= buy_amount
+                    self.log(
+                        f'底仓回补: 买入{missing_size}股 @ {current_price:.3f}，金额{buy_amount:.2f} | '
+                        f'BIAS60={current_bias:.2f}% | 当前底仓{self.base_position_size}股 | '
+                        f'波段资金剩余{self.band_cash_available:.2f}'
+                    )
+                    self.log_signal(
+                        signal_type='buy',
+                        data=self.data,
+                        trigger_condition=f'底仓回补: {"跌破均线" if self.below_ma else f"BIAS60={current_bias:.2f}% <= {self.p.base_restore_bias_threshold}%"}',
+                        indicator_values={
+                            'close': current_price,
+                            'ma60': self.ma60[0],
+                            'bias60': current_bias,
+                            'base_restore_size': missing_size,
+                            'base_restore_amount': buy_amount,
+                            'base_position_total': self.base_position_size,
+                            'band_cash_available': self.band_cash_available,
+                        },
+                        confidence=0.75,
+                    )
+
     def stop(self):
         """回测结束时的汇总"""
         super().stop()
@@ -629,4 +732,5 @@ class BandPositionStrategy(BaseStrategy):
         else:
             self.log(f'回测结束: 底仓市值{base_value:.2f} | {band_info}')
 
-        self.log(f'分仓策略总结: 底仓比例{self.p.base_position_pct}% 波段比例{self.band_position_pct}%')
+        reduce_info = " [底仓已减持]" if self.base_reduced else ""
+        self.log(f'分仓策略总结: 底仓比例{self.p.base_position_pct}% 波段比例{self.band_position_pct}%{reduce_info}')
