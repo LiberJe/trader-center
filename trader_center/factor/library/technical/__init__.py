@@ -95,6 +95,14 @@ from .price_volume import (
     OBVEMFactor,
     VolumeDivergence,
 )
+from .reversal import (
+    RSIReversalFactor,
+    BollingerReversalFactor,
+    KDJReversalFactor,
+    WilliamsReversalFactor,
+    CCIFactor,
+    BiasFactor,
+)
 
 __all__ = [
     # 原有因子
@@ -176,4 +184,11 @@ __all__ = [
     "VolumeProfile",
     "OBVEMFactor",
     "VolumeDivergence",
+    # 反转因子
+    "RSIReversalFactor",
+    "BollingerReversalFactor",
+    "KDJReversalFactor",
+    "WilliamsReversalFactor",
+    "CCIFactor",
+    "BiasFactor",
 ]

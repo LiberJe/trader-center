@@ -396,3 +396,73 @@ class CCIFactor(BaseFactor):
         cci = (tp - ma) / (constant * md)
         
         return cci
+
+
+class BiasFactor(BaseFactor):
+    """
+    乖离率因子
+    
+    衡量价格与移动平均线之间的偏离程度。
+    
+    Params:
+        period: 移动平均线周期，默认20天
+        ma_type: 移动平均线类型，可选值: sma(简单移动平均)、ema(指数移动平均)、wma(加权移动平均)
+    """
+    
+    name = "bias"
+    category = "technical"
+    description = "价格乖离率因子"
+    
+    def __init__(self, period: int = 20, ma_type: str = "sma"):
+        super().__init__(period=period, ma_type=ma_type)
+    
+    @property
+    def author(self) -> str:
+        return "factor_team"
+    
+    @property
+    def required_data(self) -> list:
+        """
+        所需数据字段
+        
+        Returns:
+            所需的数据字段列表
+        """
+        return ['close']
+    
+    def _validate_params(self):
+        if self.params['period'] <= 0:
+            raise ValueError("period 必须大于0")
+        if self.params['ma_type'] not in ["sma", "ema", "wma"]:
+            raise ValueError("ma_type 必须是 'sma', 'ema' 或 'wma'")
+    
+    def compute(self, data: pd.DataFrame) -> pd.Series:
+        """
+        计算乖离率因子
+        
+        Args:
+            data: 包含close列的DataFrame
+        
+        Returns:
+            乖离率值Series
+        """
+        period = self.params['period']
+        ma_type = self.params['ma_type']
+        
+        close = data['close']
+        
+        # 计算移动平均线
+        if ma_type == "sma":
+            ma = close.rolling(period).mean()
+        elif ma_type == "ema":
+            ma = close.ewm(span=period).mean()
+        elif ma_type == "wma":
+            weights = np.arange(1, period + 1)
+            ma = close.rolling(period).apply(
+                lambda x: np.dot(x, weights) / weights.sum()
+            )
+        
+        # 计算乖离率
+        bias = (close - ma) / ma * 100
+        
+        return bias
