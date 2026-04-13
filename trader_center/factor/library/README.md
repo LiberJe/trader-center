@@ -178,6 +178,62 @@ print(f"多空收益: {layering_result['long_short_mean']}")
 - **PricePositionFactor**: 价格位置因子
 - **SupertrendFactor**: 超级趋势因子
 
+### 基本面因子
+
+#### 估值因子
+| 因子名称 | 描述 | 方向 | 学术出处 |
+|----------|------|------|----------|
+| **PEFactor** | 市盈率因子（股价/每股收益） | negative | Fama & French (1992) |
+| **PBFactor** | 市净率因子（股价/每股净资产） | negative | Fama & French (1992) |
+| **PSFactor** | 市销率因子（股价/每股销售额） | negative | Lakonishok et al. (1994) |
+| **EVEBITDAFactor** | 企业价值倍数因子（EV/EBITDA） | negative | Damodaran (2006) |
+| **PEGFactor** | PEG因子（PE/盈利增长率） | negative | Peter Lynch |
+| **PCFFactor** | 股价现金流比因子 | negative | Sloan (1996) |
+
+#### 质量因子
+| 因子名称 | 描述 | 方向 | 学术出处 |
+|----------|------|------|----------|
+| **ROEFactor** | 净资产收益率因子（净利润/净资产） | positive | Novy-Marx (2013) |
+| **ROAFactor** | 总资产收益率因子（净利润/总资产） | positive | Novy-Marx (2013) |
+| **GrossMarginFactor** | 毛利率因子 | positive | Novy-Marx (2013) |
+| **NetMarginFactor** | 净利率因子 | positive | Novy-Marx (2013) |
+| **AssetTurnoverFactor** | 资产周转率因子 | positive | Soliman (2008) |
+| **GrossProfitabilityFactor** | 毛利润率因子（最强质量因子） | positive | Novy-Marx (2013) |
+
+#### 成长因子
+| 因子名称 | 描述 | 方向 | 学术出处 |
+|----------|------|------|----------|
+| **RevenueGrowthFactor** | 营收增长率因子 | positive | Lakonishok et al. (1994) |
+| **EarningsGrowthFactor** | 净利润增长率因子 | positive | Chan et al. (2003) |
+| **EPSGrowthFactor** | EPS增长率因子 | positive | Chan et al. (2003) |
+| **AssetGrowthFactor** | 资产增长率因子（负向因子） | negative | Cooper et al. (2008) |
+| **OCFGrowthFactor** | 经营现金流增长率因子 | positive | Sloan (1996) |
+
+#### 财务健康因子
+| 因子名称 | 描述 | 方向 | 学术出处 |
+|----------|------|------|----------|
+| **DebtRatioFactor** | 资产负债率因子 | negative | Altman (1968) |
+| **CurrentRatioFactor** | 流动比率因子 | positive | Altman (1968) |
+| **QuickRatioFactor** | 速动比率因子 | positive | Altman (1968) |
+| **InterestCoverageFactor** | 利息保障倍数因子 | positive | Ohlson (1980) |
+| **AltmanZScoreFactor** | Altman Z-Score破产预警因子 | positive | Altman (1968) |
+| **CashRatioFactor** | 现金比率因子 | positive | Ohlson (1980) |
+
+#### 现金流因子
+| 因子名称 | 描述 | 方向 | 学术出处 |
+|----------|------|------|----------|
+| **FCFYieldFactor** | 自由现金流收益率因子 | positive | Sloan (1996) |
+| **OCFToNetIncomeFactor** | 经营现金流/净利润因子（盈利质量） | positive | Sloan (1996) |
+| **CashConversionCycleFactor** | 现金循环周期因子 | negative | Richards & Laughlin (1980) |
+| **CapExRatioFactor** | 资本支出比率因子 | negative | Titman et al. (2004) |
+
+#### 分红因子
+| 因子名称 | 描述 | 方向 | 学术出处 |
+|----------|------|------|----------|
+| **DividendYieldFactor** | 股息率因子 | positive | Litzenberger & Ramaswamy (1979) |
+| **PayoutRatioFactor** | 分红率因子 | moderate | Fama & French (2001) |
+| **DividendGrowthFactor** | 股息增长率因子 | positive | Grullon et al. (2002) |
+
 ## 🔧 自定义因子
 
 创建自定义因子非常简单：

@@ -94,7 +94,7 @@ def main():
         strategy=ETFSharpStrategy,
         symbols=symbols,
         start="2019-01-01",
-        end="2024-12-31",
+        end="2026-03-29",
         initial_cash=config.initial_cash,
         strategy_params={
             'rebalance_freq': 5,

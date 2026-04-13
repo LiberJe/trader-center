@@ -197,7 +197,7 @@ class BaseStrategy(bt.Strategy):
         symbol = order.data._name if hasattr(order.data, '_name') else 'unknown'
         action = 'buy' if order.isbuy() else 'sell'
         dt = self.datas[0].datetime.datetime(0)
-        order_ref = order.ref
+        order_key = str(order.ref)
 
         if order.status == order.Submitted:
             if order_ref not in self._order_id_map:
