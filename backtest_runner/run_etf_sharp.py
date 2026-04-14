@@ -29,8 +29,8 @@ ASSET_CONFIG = {
 
 
     # 债券
-    '511010.SH': {'name': '国债ETF', 'category': 'bond'},  # 5年期国债
-    # '511260.SH': {'name': '十年国债ETF', 'category': 'bond', 'theme': '长债'},          # 10年期国债
+    # '511010.SH': {'name': '国债ETF', 'category': 'bond'},  # 5年期国债
+    '511260.SH': {'name': '十年国债ETF', 'category': 'bond'},          # 10年期国债
 
     # 商品
     '518880.SH': {'name': '黄金ETF', 'category': 'commodity'},
@@ -94,7 +94,7 @@ def main():
         strategy=ETFSharpStrategy,
         symbols=symbols,
         start="2019-01-01",
-        end="2026-03-29",
+        end="2024-12-31",
         initial_cash=config.initial_cash,
         strategy_params={
             'rebalance_freq': 5,

@@ -22,7 +22,8 @@ ASSET_CONFIG = {
     # 海外
     '513100.SH': {'name': '纳指ETF', 'category': 'equity_us'},
     # 债券
-    '511010.SH': {'name': '国债ETF', 'category': 'bond'},
+    # '511010.SH': {'name': '国债ETF', 'category': 'bond'},
+    '511260.SH': {'name': '十年国债ETF', 'category': 'bond'},
     # 商品
     '518880.SH': {'name': '黄金ETF', 'category': 'commodity'},
     '159981.SZ': {'name': '能源化工ETF', 'category': 'commodity'},
