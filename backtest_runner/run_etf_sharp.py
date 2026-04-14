@@ -35,6 +35,7 @@ ASSET_CONFIG = {
     # 商品
     '518880.SH': {'name': '黄金ETF', 'category': 'commodity'},
     '159981.SZ': {'name': '能源化工ETF', 'category': 'commodity'},
+    # '501018.SH': {'name': '原油LOF', 'category': 'commodity'},
     # '159985.SZ': {'name': '豆粕ETF', 'category': 'commodity'},
     # '159980.SZ': {'name': '有色ETF', 'category': 'commodity'},
 }
