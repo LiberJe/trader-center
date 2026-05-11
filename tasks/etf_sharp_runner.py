@@ -10,7 +10,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from trader_center.backtest import BacktestRunner, BacktestConfig
 from trader_center.backtest.strategy import ETFSharpStrategy
 from trader_center.backtest.strategy.factor_scorer import ETF_SHARP_FACTOR_CONFIGS, DEFAULT_NORMALIZATION_CONFIG
@@ -22,7 +22,8 @@ ASSET_CONFIG = {
     # 海外
     '513100.SH': {'name': '纳指ETF', 'category': 'equity_us'},
     # 债券
-    '511010.SH': {'name': '国债ETF', 'category': 'bond'},
+    # '511010.SH': {'name': '国债ETF', 'category': 'bond'},
+    '511260.SH': {'name': '十年国债ETF', 'category': 'bond'},
     # 商品
     '518880.SH': {'name': '黄金ETF', 'category': 'commodity'},
     '159981.SZ': {'name': '能源化工ETF', 'category': 'commodity'},
@@ -232,7 +233,7 @@ def generate_daily_report(result, report_dir: Path, today_str: str, today_displa
 
 def main():
     # 获取当天日期
-    today = date.today()
+    today = date.today() - timedelta(days=0)
     today_str = today.strftime("%Y%m%d")
     today_display = today.strftime("%Y年%m月%d日")
 
