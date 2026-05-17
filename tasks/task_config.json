@@ -1,0 +1,16 @@
+{
+  "tasks": [
+    {
+      "name": "etf_sharp",
+      "script": "etf_sharp_runner.py",
+      "description": "ETF夏普比率轮动策略",
+      "enabled": true
+    },
+    {
+      "name": "band_position",
+      "script": "band_position_runner.py",
+      "description": "分仓波段策略",
+      "enabled": true
+    }
+  ]
+}
