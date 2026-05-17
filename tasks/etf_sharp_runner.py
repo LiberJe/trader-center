@@ -231,7 +231,7 @@ def generate_daily_report(result, report_dir: Path, today_str: str, today_displa
     return report_path
 
 
-def main():
+def main(report_subdir: str = None):
     # 获取当天日期
     today = date.today() - timedelta(days=0)
     today_str = today.strftime("%Y%m%d")
@@ -241,6 +241,8 @@ def main():
 
     # 创建报告目录 (项目根目录下的 task_reports/)
     report_dir = Path(__file__).parent.parent / "task_reports" / today_str
+    if report_subdir:
+        report_dir = report_dir / report_subdir
     report_dir.mkdir(parents=True, exist_ok=True)
 
     # 资产池
@@ -324,7 +326,7 @@ def main():
         if not df_pos.empty:
             df_pos['date'] = pd.to_datetime(df_pos['date']).dt.date
             latest_date = df_pos['date'].max()
-            latest_pos = df_pos[df_pos['date'] == latest_date]
+            latest_pos = df_pos[df_pos['date'] == latest_date].drop_duplicates(subset=['symbol'], keep='first')
 
             # 获取最新资金计算权重
             df_cap = pd.DataFrame(result.capital_log)
@@ -356,6 +358,98 @@ def main():
         print(f"\n所有文件已保存到: {report_dir}")
         for name, path in result.log_files.items():
             print(f"  - {name}: {Path(path).name}")
+
+    # 构造返回结果
+    result_dict = {
+        "status": "error" if result.error_message else "success",
+        "report_path": str(report_path) if 'report_path' in locals() else None,
+        "error_message": result.error_message,
+        "metrics": {
+            "return_pct": result.return_pct,
+            "max_drawdown": result.calculate_max_drawdown(),
+            "sharpe_ratio": result.calculate_sharpe_ratio(),
+            "final_value": result.final_value,
+            "initial_cash": result.initial_cash,
+            "total_trades": result.total_trades,
+            "win_rate": result.win_rate,
+            "profit_factor": result.profit_factor,
+        },
+    }
+
+    # 持仓摘要
+    try:
+        holdings_summary = ""
+        if result.position_log:
+            import pandas as pd
+            df_pos = pd.DataFrame(result.position_log)
+            if not df_pos.empty:
+                df_pos['date'] = pd.to_datetime(df_pos['date']).dt.date
+                latest_date = df_pos['date'].max()
+                latest_pos = df_pos[df_pos['date'] == latest_date].drop_duplicates(subset=['symbol'], keep='first')
+
+                df_cap = pd.DataFrame(result.capital_log)
+                total_value = result.final_value
+                if not df_cap.empty:
+                    df_cap['date'] = pd.to_datetime(df_cap['date']).dt.date
+                    latest_cap = df_cap[df_cap['date'] == latest_date]
+                    if not latest_cap.empty:
+                        total_value = latest_cap.iloc[0]['total_value']
+
+                holdings = []
+                for _, pos in latest_pos.iterrows():
+                    symbol = pos['symbol']
+                    name = ASSET_CONFIG.get(symbol, {}).get('name', symbol)
+                    mv = pos['market_value']
+                    weight = mv / total_value * 100 if total_value > 0 else 0
+                    holdings.append(f"{name} ({weight:.1f}%)")
+
+                cash = 0
+                if not df_cap.empty:
+                    latest_cap = df_cap[df_cap['date'] == latest_date]
+                    if not latest_cap.empty:
+                        cash = latest_cap.iloc[0]['cash']
+                cash_ratio = cash / total_value * 100 if total_value > 0 else 0
+                if cash_ratio > 1:
+                    holdings.append(f"现金 ({cash_ratio:.1f}%)")
+
+                holdings_summary = ", ".join(holdings) if holdings else "无持仓"
+        result_dict["holdings_summary"] = holdings_summary or "无持仓"
+    except Exception:
+        result_dict["holdings_summary"] = "获取持仓摘要失败"
+
+    # 信号摘要
+    try:
+        signals_summary = "今日无交易"
+        if result.signal_log:
+            import pandas as pd
+            df_sig = pd.DataFrame(result.signal_log)
+            if not df_sig.empty:
+                df_sig['datetime'] = pd.to_datetime(df_sig['datetime'])
+                signal_types = ['buy', 'rebalance', 'stop_loss', 'trailing_stop']
+                df_sig = df_sig[df_sig['signal_type'].isin(signal_types)]
+                today = datetime.strptime(today_str, "%Y%m%d").date()
+                today_signals = df_sig[df_sig['datetime'].dt.date == today]
+                if not today_signals.empty:
+                    sigs = []
+                    for _, sig in today_signals.iterrows():
+                        symbol = sig['symbol']
+                        name = ASSET_CONFIG.get(symbol, {}).get('name', symbol)
+                        sig_type = sig['signal_type']
+                        sigs.append(f"{name} ({sig_type})")
+                    signals_summary = ", ".join(sigs)
+                else:
+                    latest_sig_date = df_sig['datetime'].dt.date.max()
+                    latest_signals = df_sig[df_sig['datetime'].dt.date == latest_sig_date]
+                    if not latest_signals.empty:
+                        sig = latest_signals.iloc[-1]
+                        symbol = sig['symbol']
+                        name = ASSET_CONFIG.get(symbol, {}).get('name', symbol)
+                        signals_summary = f"最新信号 ({latest_sig_date}): {name} ({sig['signal_type']})"
+        result_dict["signals_summary"] = signals_summary
+    except Exception:
+        result_dict["signals_summary"] = "获取信号摘要失败"
+
+    return result_dict
 
 
 if __name__ == "__main__":
