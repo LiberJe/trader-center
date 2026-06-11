@@ -166,7 +166,39 @@ class ETFSharpStrategy(BaseStrategy):
             return self.order_target_percent(data=data, target=target, exectype=bt.Order.Close)
         else:
             return self.order_target_percent(data=data, target=target)
-    
+
+    def notify_order(self, order: bt.Order):
+        """
+        订单状态通知回调
+
+        维护持仓成本价和最高价，用于止损/移动止盈计算。
+        """
+        super().notify_order(order)
+
+        if order.status != order.Completed:
+            return
+
+        symbol = order.data._name if hasattr(order.data, '_name') else 'unknown'
+        exec_price = order.executed.price
+        exec_size = int(abs(order.executed.size))
+
+        if order.isbuy():
+            # 买入时更新加权平均成本与最高价
+            self._update_entry_price(symbol, exec_price, exec_size)
+        else:
+            # 卖出时减少持仓数量；若全部卖出则清空跟踪状态
+            old_size = self.position_sizes.get(symbol, 0)
+            new_size = max(0, old_size - exec_size)
+            self.position_sizes[symbol] = new_size
+
+            if new_size == 0:
+                if symbol in self.entry_prices:
+                    del self.entry_prices[symbol]
+                if symbol in self.highest_prices:
+                    del self.highest_prices[symbol]
+                if symbol in self.position_sizes:
+                    del self.position_sizes[symbol]
+
     def prenext(self):
         """预热期 - 缓存数据"""
         self._update_data_cache()
@@ -558,10 +590,12 @@ class ETFSharpStrategy(BaseStrategy):
                 continue
             
             current_price = data.close[0]
-            
+
             if symbol not in self.entry_prices:
-                self.entry_prices[symbol] = current_price
-                self.highest_prices[symbol] = current_price
+                # 作为兜底：若 notify_order 未能及时更新，使用 backtrader 的成本价
+                entry_price = position.price if position.price > 0 else current_price
+                self.entry_prices[symbol] = entry_price
+                self.highest_prices[symbol] = max(entry_price, current_price)
                 self.position_sizes[symbol] = int(position.size)
                 continue
             
