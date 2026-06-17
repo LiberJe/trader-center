@@ -298,7 +298,7 @@ def main(report_subdir: str = None):
             'entry_confirmation': 1,         # 新资产入场确认次数（1=无延迟）
             'max_position_pct': 0.95,        # 最大仓位比例（5%现金缓冲）
             'min_rebalance_pct': 0.02,       # 最小调仓阈值
-            'max_turnover_pct': 0.2,        # 单次再平衡最大换手率（0=不限制）
+            'max_turnover_pct': 0.3,        # 单次再平衡最大换手率（0=不限制）
         }
     )
 
