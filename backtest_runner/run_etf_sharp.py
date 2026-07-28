@@ -16,7 +16,7 @@ from trader_center.backtest.strategy.factor_scorer import ETF_SHARP_FACTOR_CONFI
 
 ASSET_CONFIG = {
     # 宽基指数
-    '510300.SH': {'name': '沪深300ETF', 'category': 'equity_cn'},
+    # '510300.SH': {'name': '沪深300ETF', 'category': 'equity_cn'},
     '159915.SZ': {'name': '创业板ETF', 'category': 'equity_cn'},
 
     # 海外
@@ -80,17 +80,18 @@ def main():
     print("\n回测参数:")
     print(f"  初始资金: {config.initial_cash:,.0f} 元")
     print(f"  回测区间: 2020-01-01 ~ 2024-12-31")
-    print(f"  再平衡频率: 5个交易日")
-    print(f"  持仓数量: 3")
+    print(f"  动态调仓: 最短5日 / 最长15日 / 组合变化触发")
+    print(f"  持仓数量: 3只")
+    print(f"  得分平滑: 3期")
     print(f"  因子计算窗口: 60天")
     print(f"  权重分配方法: equal (等权)")
     print(f"  订单执行: 次日收盘价 (exec_type='close')")
     print(f"  止损比例: 10%")
     print(f"  移动止盈: 5%")
     print(f"  止损冷却期: 5个交易日")
-    
+
     print("\n开始回测...")
-    
+
     result = runner.run(
         strategy=ETFSharpStrategy,
         symbols=symbols,
@@ -98,8 +99,22 @@ def main():
         end="2024-12-31",
         initial_cash=config.initial_cash,
         strategy_params={
-            'rebalance_freq': 5,
+            # 动态再平衡参数：组合变化 + 最大间隔
+            'min_rebalance_freq': 5,
+            'max_rebalance_freq': 15,
+            'rebalance_threshold': 1.0,      # 禁用权重偏离触发（避免过度交易）
+            'score_change_threshold': 10.0,  # 禁用得分跳跃触发
+            # 固定持仓（动态 top_n 在当前参数下效果不佳，保留开关供后续研究）
+            'use_dynamic_top_n': False,
             'top_n': 3,
+            'top_n_max': 3,
+            'top_n_min': 0,
+            # 得分平滑，降低信号噪音
+            'score_smooth_periods': 3,
+            # 仓位控制
+            'max_position_pct': 0.95,
+            'max_single_position_pct': 0.40,
+            # 原参数
             'lookback': 60,
             'factor_configs': ETF_SHARP_FACTOR_CONFIGS,
             'normalization_config': DEFAULT_NORMALIZATION_CONFIG,
