@@ -19,6 +19,10 @@ from datetime import date, datetime, timedelta
 from trader_center.backtest import BacktestRunner, BacktestConfig
 from trader_center.backtest.strategy import RiskParityStrategy4A, LEG_CONFIG
 
+# 复用独立运行器的维度分析导出（腿级 + 标的级 权重/市值/净值曲线与明细）
+sys.path.insert(0, str(project_root / "backtest_runner"))
+from run_risk_parity import export_leg_analysis, export_symbol_analysis
+
 ASSET_CONFIG = {
     # 股票腿
     '510300.SH': {'name': '沪深300ETF', 'leg': '股票'},
@@ -405,6 +409,15 @@ def main(report_subdir: str = None):
         print(f"报告已保存: {report_path}")
     except Exception as e:
         print(f"生成报告失败: {e}")
+
+    # 维度分析：资产类别（腿）级 + 标的（ETF）级，权重/市值/净值曲线 + 明细数据
+    print("\n导出维度分析...")
+    try:
+        result.log_files.update(export_leg_analysis(result, LEG_CONFIG, report_dir))
+        result.log_files.update(export_symbol_analysis(result, LEG_CONFIG, report_dir))
+        print("维度分析已导出")
+    except Exception as e:
+        print(f"导出维度分析失败: {e}")
 
     # 显示日志文件位置
     if result.log_files:
