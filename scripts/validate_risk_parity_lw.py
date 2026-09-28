@@ -36,7 +36,6 @@ SYMBOLS = [s for leg in strategy_module.LEG_CONFIG.values() for s in leg["member
 PARAMS = dict(
     cov_window=250,
     rebalance_threshold=0.05,
-    equity_cap=0.30,
     commission=0.0005,
     stamp_duty=0.0,
     min_commission=0.0,
@@ -58,14 +57,15 @@ class AuditStrategy(strategy_module.RiskParityStrategy4A):
         assert np.isfinite(cov).all() and np.linalg.eigvalsh(cov).min() > 0
         assert np.isfinite(weights).all() and (weights >= 0).all()
         np.testing.assert_allclose(weights.sum(), 1, atol=1e-10)
-        np.testing.assert_allclose(rc, 0.25, atol=1e-6)
+        risk_budget = 1 / len(weights)
+        np.testing.assert_allclose(rc, risk_budget, atol=1e-6)
         self.audit_checks.append(
             {
                 "date": self.datas[0].datetime.date(0).isoformat(),
                 "predicted_annual_volatility": float(
                     np.sqrt(weights @ cov @ weights * 252)
                 ),
-                "max_risk_budget_error": float(np.max(np.abs(rc - 0.25))),
+                "max_risk_budget_error": float(np.max(np.abs(rc - risk_budget))),
                 **dict(zip(strategy_module.LEG_NAMES, weights.tolist())),
             }
         )
@@ -269,7 +269,7 @@ def main():
         f"旧公式基准提交：`{args.baseline_ref}`；最新共同行情日：{end}。",
         "",
         "同一份本地缓存、同一策略与参数；仅切换协方差估计和收缩强度函数。",
-        "资金 100 万，窗口 250 日，调仓阈值 5%，股腿风险上限 30%，佣金 5bp。",
+        f"资金 100 万，窗口 250 日，调仓阈值 5%，每腿风险预算 1/{len(strategy_module.LEG_CONFIG)}，佣金 5bp。",
         "",
         "| 区间 | 版本 | 累计收益 | CAGR | 年化波动 | 夏普 | 最大回撤 | 调仓批次 | 成交单 | 失败单 | 实际费用（元） |",
         "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",

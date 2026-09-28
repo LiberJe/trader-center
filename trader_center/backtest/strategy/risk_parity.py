@@ -8,10 +8,9 @@
 - 商品：    159981.SZ 能源化工 + 159985.SZ 豆粕 + 159980.SZ 有色（三等权合成一条腿）
 
 规则（继承规格书 v2 核心参数，全部冻结于 2024-12-31 样本）：
-- 权重方法：等风险贡献（ERC），w ≥ 0，Σw = 1
+- 权重方法：按资产腿分配等风险预算，每腿 1/N；w ≥ 0，Σw = 1
 - 协方差：Ledoit-Wolf (2004, Honey) 收缩，滚动 250 个交易日，
   估计窗口截至 T-1 收盘（无前视偏差）
-- 股腿风险贡献上限 30%（保险条款，本样本零触发）
 - 调仓机制：Σ|实际权重 − 目标权重| > 5% 触发；
   每月最后一个交易日强制检查（检查 ≠ 无条件调仓）
 - 执行时点：触发日收盘计算，T+1 收盘生效（broker cheat-on-close 实现）
@@ -31,7 +30,7 @@ import numpy as np
 
 from .base import BaseStrategy
 from .risk_parity_math import (
-    erc_weights_with_cap,
+    erc_weights,
     ledoit_wolf_cov,
     risk_contributions,
     shrinkage_intensity,
@@ -39,7 +38,7 @@ from .risk_parity_math import (
 from trader_center.backtest.broker import AStockCommissionScheme
 
 
-# 腿定义：顺序即 ERC 求解中的资产顺序（cap_idx=0 为股腿）
+# 腿定义：顺序即 ERC 求解中的资产顺序，每腿分配 1/N 风险预算
 LEG_CONFIG = {
     "equity": {
         "name": "股票",
@@ -75,7 +74,6 @@ class RiskParityStrategy4A(BaseStrategy):
     Params:
         cov_window: 协方差滚动估计窗口（交易日），默认 250
         rebalance_threshold: 调仓触发阈值（Σ|实际−目标|，L1 偏离），默认 0.05
-        equity_cap: 股腿风险贡献上限（保险条款），默认 0.30
         commission: 单边佣金率，默认 0.0005（5bp）
         stamp_duty: 印花税率，默认 0.0（ETF 免印花税）
         min_commission: 最低佣金，默认 0.0
@@ -87,7 +85,6 @@ class RiskParityStrategy4A(BaseStrategy):
     params = (
         ("cov_window", 250),
         ("rebalance_threshold", 0.05),
-        ("equity_cap", 0.30),
         ("commission", 0.0005),
         ("stamp_duty", 0.0),
         ("min_commission", 0.0),
@@ -135,7 +132,7 @@ class RiskParityStrategy4A(BaseStrategy):
 
         self.log(
             f"策略初始化: 腿={LEG_NAMES}, 窗口={self.p.cov_window}, "
-            f"阈值={self.p.rebalance_threshold:.2%}, 股腿上限={self.p.equity_cap:.2%}, "
+            f"阈值={self.p.rebalance_threshold:.2%}, 每腿风险预算={1 / len(LEG_NAMES):.2%}, "
             f"佣金={self.p.commission:.4%}"
         )
 
@@ -220,7 +217,8 @@ class RiskParityStrategy4A(BaseStrategy):
         leg_ret = np.column_stack(cols)
 
         cov = ledoit_wolf_cov(leg_ret)
-        leg_w = erc_weights_with_cap(cov, cap_idx=0, cap=self.p.equity_cap)
+        # ERC 默认根据协方差维度 N 分配 1/N 风险预算，不区分股票或其他腿。
+        leg_w = erc_weights(cov)
         rc = risk_contributions(leg_w, cov)
 
         self.last_leg_weights = leg_w

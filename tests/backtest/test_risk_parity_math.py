@@ -5,7 +5,7 @@
 - Ledoit-Wolf (2004 Honey) 收缩估计的合理性（PSD、MSE 不劣于样本协方差量级）
 - CCD-ERC 求解器与 SLSQP 参考解一致
 - 风险贡献计算的正确性
-- 单腿风险贡献上限条款
+- 不同资产腿数量下的 1/N 风险预算
 """
 
 import numpy as np
@@ -13,7 +13,6 @@ import pytest
 
 from trader_center.backtest.strategy.risk_parity_math import (
     erc_weights,
-    erc_weights_with_cap,
     ledoit_wolf_cov,
     risk_contributions,
     shrinkage_intensity,
@@ -215,19 +214,16 @@ class TestERC:
         w_ccd = erc_weights(cov_4a)
         assert np.abs(w_ccd - res.x).max() < 1e-6
 
-    def test_cap_non_binding(self, cov_4a):
-        """上限宽松时不应触发（规格书：30% 上限全样本零触发）"""
-        w = erc_weights_with_cap(cov_4a, cap_idx=0, cap=0.30)
-        rc = risk_contributions(w, cov_4a)
-        assert rc[0] < 0.30
-        # 无约束 ERC 股腿 RC = 25%，上限 30% 时解应不变
-        w_free = erc_weights(cov_4a)
-        assert np.allclose(w, w_free, atol=1e-8)
-
-    def test_cap_binding(self, cov_4a):
-        """上限收紧时应恰好满足约束"""
-        w = erc_weights_with_cap(cov_4a, cap_idx=0, cap=0.20)
-        rc = risk_contributions(w, cov_4a)
-        assert np.isclose(rc[0], 0.20, atol=1e-4)
+    @pytest.mark.parametrize("n_legs", [2, 3, 4, 5, 8])
+    def test_equal_risk_budget_follows_leg_count(self, n_legs):
+        """每腿风险预算随 N 变化，包括超过旧股票上限的 2/3 腿情况。"""
+        rng = np.random.default_rng(42)
+        factor = rng.standard_normal((n_legs, n_legs))
+        cov = factor @ factor.T + np.eye(n_legs)
+        scales = np.linspace(0.03, 0.20, n_legs)
+        cov *= np.outer(scales, scales)
+        w = erc_weights(cov)
+        rc = risk_contributions(w, cov)
+        np.testing.assert_allclose(rc, 1 / n_legs, atol=1e-6)
         assert np.isclose(w.sum(), 1.0)
         assert np.all(w >= -1e-12)

@@ -70,7 +70,6 @@ _STRATEGY_DEFAULTS = dict(RiskParityStrategy4A.params()._getkwargs())
 _STRATEGY_ARG_MAP = {
     "threshold": "rebalance_threshold",
     "cov_window": "cov_window",
-    "equity_cap": "equity_cap",
     "commission": "commission",
     "stamp_duty": "stamp_duty",
     "min_commission": "min_commission",
@@ -452,12 +451,6 @@ def main():
         help=f"协方差估计窗口，默认 {_STRATEGY_DEFAULTS['cov_window']}",
     )
     parser.add_argument(
-        "--equity-cap",
-        type=float,
-        default=None,
-        help=f"股腿风险贡献上限（保险条款），默认 {_STRATEGY_DEFAULTS['equity_cap']}",
-    )
-    parser.add_argument(
         "--commission",
         type=float,
         default=None,
@@ -520,7 +513,7 @@ def main():
         "月末强制检查"
     )
     print(
-        f"  股腿上限: {strategy_params['equity_cap']:.2%}，"
+        f"  每腿风险预算: 1/{len(LEG_CONFIG)} = {1 / len(LEG_CONFIG):.2%}，"
         f"佣金: {strategy_params['commission']:.4%}/单边，"
         f"印花税: {strategy_params['stamp_duty']:.4%}，"
         f"最低佣金: {strategy_params['min_commission']:g} 元"

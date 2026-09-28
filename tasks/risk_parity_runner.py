@@ -342,7 +342,6 @@ def main(report_subdir: str = None):
         strategy_params={
             'cov_window': 250,            # 协方差滚动估计窗口（交易日）
             'rebalance_threshold': 0.05,  # 调仓触发阈值（Σ|实际-目标|，L1 偏离）
-            'equity_cap': 0.30,           # 股腿风险贡献上限（保险条款）
             'commission': 0.0005,         # 单边佣金率（5bp）
             'stamp_duty': 0.0,            # 印花税率（ETF 免印花税）
             'min_commission': 0.0,        # 最低佣金
