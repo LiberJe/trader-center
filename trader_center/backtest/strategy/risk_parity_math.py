@@ -36,8 +36,20 @@ def ledoit_wolf_cov(returns: np.ndarray) -> np.ndarray:
         returns: 收益率矩阵，shape (n, p)，n 个观测、 p 个资产
 
     Returns:
-        收缩后的协方差矩阵，shape (p, p)，保证对称正定
+        收缩后的协方差矩阵，shape (p, p)，对称；退化数据下不保证严格正定
     """
+    cov, _ = _ledoit_wolf_estimate(returns)
+    return cov
+
+
+def shrinkage_intensity(returns: np.ndarray) -> float:
+    """返回协方差估计实际采用的 LW 收缩强度 δ；S == F 时约定为 1。"""
+    _, intensity = _ledoit_wolf_estimate(returns)
+    return intensity
+
+
+def _ledoit_wolf_estimate(returns: np.ndarray) -> tuple[np.ndarray, float]:
+    """共用常相关目标估计，避免协方差与诊断强度的公式或边界处理分叉。"""
     X = np.asarray(returns, dtype=np.float64)
     if X.ndim != 2:
         raise ValueError("returns 必须是二维矩阵 (n, p)")
@@ -73,7 +85,8 @@ def ledoit_wolf_cov(returns: np.ndarray) -> np.ndarray:
     idx = np.arange(p)
     d_i = d[idx]  # √s_ii
     ratio_ij = np.outer(d_i, 1.0 / d_i)  # √(s_ii/s_jj)，[i,j] 元素
-    theta_ii_ij = (X2.T @ X) / n - S * np.diag(S)[:, None]  # ϑ̂_{ii,ij}
+    # 展开中心化乘积得到 E[x_i³ x_j] - s_ii·s_ij，必须是四阶矩。
+    theta_ii_ij = ((X2 * X).T @ X) / n - S * np.diag(S)[:, None]
     rho_off = (rbar / 2.0) * (
         np.swapaxes(ratio_ij, 0, 1) * theta_ii_ij  # √(s_jj/s_ii)·ϑ̂_{ii,ij}
         + ratio_ij * theta_ii_ij.T  # √(s_ii/s_jj)·ϑ̂_{jj,ij}
@@ -93,47 +106,12 @@ def ledoit_wolf_cov(returns: np.ndarray) -> np.ndarray:
 
     cov = shrinkage * F + (1.0 - shrinkage) * S
 
-    # 数值保护：对称化 + 对角下限，保证正定可用
+    # 数值保护：对称化 + 对角下限（不等价于严格正定修复）
     cov = (cov + cov.T) / 2.0
     diag = np.diag(cov).copy()
     diag[diag <= 0] = 1e-12
     np.fill_diagonal(cov, diag)
-    return cov
-
-
-def shrinkage_intensity(returns: np.ndarray) -> float:
-    """返回 LW 收缩强度 δ（调试用）。"""
-    X = np.asarray(returns, dtype=np.float64)
-    n, p = X.shape
-    X = X - X.mean(axis=0)
-    S = (X.T @ X) / n
-
-    d = np.sqrt(np.diag(S))
-    outer_d = np.outer(d, d)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        R = np.where(outer_d > 0, S / np.where(outer_d > 0, outer_d, 1.0), 0.0)
-    np.fill_diagonal(R, 0.0)
-    rbar = R.sum() / (p * (p - 1)) if p > 1 else 0.0
-    F = rbar * outer_d
-    np.fill_diagonal(F, np.diag(S))
-
-    X2 = X * X
-    pi_mat = (X2.T @ X2) / n - S * S
-
-    idx = np.arange(p)
-    d_i = d[idx]
-    ratio_ij = np.outer(d_i, 1.0 / d_i)
-    theta_ii_ij = (X2.T @ X) / n - S * np.diag(S)[:, None]
-    rho_off = (rbar / 2.0) * (
-        np.swapaxes(ratio_ij, 0, 1) * theta_ii_ij + ratio_ij * theta_ii_ij.T
-    )
-    np.fill_diagonal(rho_off, 0.0)
-    rho = float(np.sum(pi_mat[idx, idx]) + np.sum(rho_off))
-
-    gamma2 = float(np.sum((F - S) ** 2))
-    if gamma2 <= 0:
-        return 0.0
-    return min(1.0, max(0.0, (float(np.sum(pi_mat)) - rho) / (n * gamma2)))
+    return cov, shrinkage
 
 
 # ---------------------------------------------------------------------------

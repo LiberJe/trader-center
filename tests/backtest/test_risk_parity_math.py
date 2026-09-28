@@ -47,7 +47,72 @@ def cov_4a():
 # ---------------------------------------------------------------------------
 
 
+def _constant_correlation_reference(returns):
+    """按 Honey 附录的中心化乘积定义逐项计算，独立于生产代码的矩阵展开。"""
+    x = returns - returns.mean(axis=0)
+    n, p = x.shape
+    sample = x.T @ x / n
+    std = np.sqrt(np.diag(sample))
+    mean_corr = np.mean(
+        [sample[i, j] / (std[i] * std[j]) for i in range(p) for j in range(i)]
+    )
+    target = mean_corr * np.outer(std, std)
+    np.fill_diagonal(target, np.diag(sample))
+
+    pi = 0.0
+    rho = 0.0
+    for i in range(p):
+        for j in range(p):
+            residual = x[:, i] * x[:, j] - sample[i, j]
+            pi_ij = np.mean(residual**2)
+            pi += pi_ij
+            if i == j:
+                rho += pi_ij
+            else:
+                theta_i = np.mean((x[:, i] ** 2 - sample[i, i]) * residual)
+                theta_j = np.mean((x[:, j] ** 2 - sample[j, j]) * residual)
+                rho += (
+                    mean_corr
+                    / 2
+                    * (std[j] / std[i] * theta_i + std[i] / std[j] * theta_j)
+                )
+
+    distance = np.sum((target - sample) ** 2)
+    intensity = float(np.clip((pi - rho) / (n * distance), 0, 1))
+    return intensity, intensity * target + (1 - intensity) * sample
+
+
 class TestLedoitWolf:
+    @pytest.mark.parametrize("seed", [0, 42, 2026])
+    def test_matches_centered_product_reference(self, cov_4a, seed):
+        rng = np.random.default_rng(seed)
+        returns = rng.standard_normal((250, 4)) @ np.linalg.cholesky(cov_4a / 252).T
+        expected_delta, expected_cov = _constant_correlation_reference(returns)
+        # 避免被 [0, 1] 裁剪掩盖收缩强度公式错误。
+        assert 0 < expected_delta < 1
+        assert shrinkage_intensity(returns) == pytest.approx(expected_delta, abs=1e-12)
+        np.testing.assert_allclose(
+            ledoit_wolf_cov(returns), expected_cov, rtol=1e-12, atol=1e-18
+        )
+
+    @pytest.mark.parametrize("scale", [0.01, 100.0, -1.0])
+    def test_uniform_scaling_preserves_intensity_and_erc(self, cov_4a, scale):
+        rng = np.random.default_rng(42)
+        returns = rng.standard_normal((250, 4)) @ np.linalg.cholesky(cov_4a / 252).T
+        cov = ledoit_wolf_cov(returns)
+        scaled_cov = ledoit_wolf_cov(returns * scale)
+        assert shrinkage_intensity(returns * scale) == pytest.approx(
+            shrinkage_intensity(returns), abs=1e-12
+        )
+        np.testing.assert_allclose(scaled_cov, cov * scale**2, rtol=1e-12, atol=1e-18)
+        np.testing.assert_allclose(erc_weights(scaled_cov), erc_weights(cov), atol=1e-9)
+
+    def test_identical_target_reports_actual_intensity(self):
+        # S == F 时强度不可识别；两个公开入口约定同样使用 delta=1。
+        returns = np.array([[-1.0, -2.0], [1.0, 2.0]])
+        assert shrinkage_intensity(returns) == 1.0
+        np.testing.assert_allclose(ledoit_wolf_cov(returns), [[1.0, 2.0], [2.0, 4.0]])
+
     def test_output_shape_and_psd(self):
         rng = np.random.default_rng(0)
         X = rng.standard_normal((250, 4))
