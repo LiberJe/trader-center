@@ -78,7 +78,9 @@ def generate_daily_report(result, report_dir: Path, today_str: str, today_displa
             ].to_dict('records')
 
     # 计算当日收益
-    daily_return = latest_capital.get('daily_return', 0) * 100
+    daily_return = latest_capital.get('daily_return', 0)
+    data_date = latest_capital.get('date')
+    data_display = data_date.strftime("%Y年%m月%d日") if data_date else "无行情数据"
 
     # 获取交易信号
     today_signals = []
@@ -102,17 +104,18 @@ def generate_daily_report(result, report_dir: Path, today_str: str, today_displa
 | 指标 | 数值 |
 |------|------|
 | 回测区间 | {result.start_date} ~ {result.end_date} |
+| 行情截至 | {data_display} |
 | 初始资金 | {result.initial_cash:,.0f} 元 |
 | 当前总资产 | {result.final_value:,.2f} 元 |
 | 累计收益率 | {result.return_pct:+.2%} |
-| 当日收益 | {daily_return:+.2%} |
+| 最近交易日收益 | {daily_return:+.2%} |
 | 最大回撤 | {result.calculate_max_drawdown():.2%} |
 | 夏普比率 | {result.calculate_sharpe_ratio():.2f} |
 | 总交易次数 | {result.total_trades} |
 | 胜率 | {result.win_rate:.1%} |
 | 盈亏比 | {result.profit_factor:.2f} |
 
-## 当前持仓 ({today_display})
+## 当前持仓 ({data_display})
 
 """
 

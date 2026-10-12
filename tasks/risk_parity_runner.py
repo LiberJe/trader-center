@@ -91,7 +91,9 @@ def generate_daily_report(result, report_dir: Path, today_str: str, today_displa
             ].to_dict('records')
 
     # 计算当日收益
-    daily_return = latest_capital.get('daily_return', 0) * 100
+    daily_return = latest_capital.get('daily_return', 0)
+    data_date = latest_capital.get('date')
+    data_display = data_date.strftime("%Y年%m月%d日") if data_date else "无行情数据"
 
     # 获取交易信号
     today_signals = []
@@ -132,10 +134,11 @@ def generate_daily_report(result, report_dir: Path, today_str: str, today_displa
 | 指标 | 数值 |
 |------|------|
 | 回测区间 | {result.start_date} ~ {result.end_date} |
+| 行情截至 | {data_display} |
 | 初始资金 | {result.initial_cash:,.0f} 元 |
 | 当前总资产 | {result.final_value:,.2f} 元 |
 | 累计收益率 | {result.return_pct:+.2%} |
-| 当日收益 | {daily_return:+.2%} |
+| 最近交易日收益 | {daily_return:+.2%} |
 | 最大回撤 | {result.calculate_max_drawdown():.2%} |
 | 夏普比率 | {result.calculate_sharpe_ratio():.2f} |
 | 总交易次数 | {result.total_trades} |
@@ -144,7 +147,7 @@ def generate_daily_report(result, report_dir: Path, today_str: str, today_displa
 
 ## 资产配置（腿维度）
 
-| 资产腿 | 市值 | 实际权重 | 目标权重 | 风险贡献 |
+| 资产腿 | 市值 | 实际权重 | 最近调仓目标权重 | 目标风险贡献 |
 |--------|------|----------|----------|----------|
 """
 
@@ -157,8 +160,11 @@ def generate_daily_report(result, report_dir: Path, today_str: str, today_displa
         rc_str = f"{rc*100:.1f}%" if rc is not None else "-"
         report += f"| {leg} | {mv:,.0f} | {weight:.1f}% | {target_str} | {rc_str} |\n"
 
+    if latest_sig_date:
+        report += f"\n目标权重和目标风险贡献来自 {latest_sig_date} 的调仓信号，不代表当前持仓的实时风险贡献。\n"
+
     report += f"""
-## 当前持仓 ({today_display})
+## 当前持仓 ({data_display})
 
 """
 
