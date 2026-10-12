@@ -1,7 +1,7 @@
 """
 四资产风险平价策略（策略规格书 v3.2）
 
-4 腿 6 只 ETF（全部 A 股场内）：
+内置默认组合为 4 腿 6 只 ETF（asset_config 可完整覆盖）：
 - 中国股票：510300.SH 沪深300ETF
 - 利率债：  511260.SH 上证10年期国债ETF
 - 黄金：    518880.SH 黄金ETF
@@ -31,6 +31,7 @@ import backtrader as bt
 import numpy as np
 
 from .base import BaseStrategy
+from .risk_parity_config import DEFAULT_LEG_CONFIG, resolve_risk_parity_config
 from .risk_parity_math import (
     erc_weights,
     ledoit_wolf_cov,
@@ -40,28 +41,8 @@ from .risk_parity_math import (
 from trader_center.backtest.broker import AStockCommissionScheme
 
 
-# 腿定义：顺序即 ERC 求解中的资产顺序，每腿分配 1/N 风险预算
-LEG_CONFIG = {
-    "equity": {
-        "name": "股票",
-        "members": ("510300.SH",), # 510300.SH 沪深300ETF
-        # "members": ("513100.SH",), # 510300.SH 纳指ETF
-        # "members": ("510300.SH","513100.SH",), # 混合
-    },
-    "bond": {
-        "name": "利率债10Y",
-        "members": ("511260.SH",),
-    },
-    "gold": {
-        "name": "黄金",
-        "members": ("518880.SH",),
-    },
-    "commodity": {
-        "name": "商品三混合",
-        "members": ("159981.SZ", "159985.SZ", "159980.SZ"),
-    },
-}
-
+# 内置默认腿定义的兼容导出；执行逻辑仅使用每个实例解析后的配置。
+LEG_CONFIG = DEFAULT_LEG_CONFIG
 LEG_NAMES = list(LEG_CONFIG.keys())
 
 
@@ -74,6 +55,8 @@ class RiskParityStrategy4A(BaseStrategy):
     T+1 收盘执行。
 
     Params:
+        asset_config: 外部完整标的池 {代码: {name, leg}}，None 使用内置默认值；
+            leg 接受内置英文键、中文腿名或自定义腿键，同腿成员等权合成
         cov_window: 协方差滚动估计窗口（交易日），默认 250
         rebalance_threshold: 调仓触发阈值（Σ|实际−目标|，L1 偏离），默认 0.05
         commission: 单边佣金率，默认 0.0005（5bp）
@@ -85,6 +68,7 @@ class RiskParityStrategy4A(BaseStrategy):
     description = "四资产风险平价策略（ERC + LW收缩 + 每日阈值检查，规格书v3.2）"
 
     params = (
+        ("asset_config", None),
         ("cov_window", 250),
         ("rebalance_threshold", 0.05),
         ("commission", 0.0005),
@@ -95,10 +79,10 @@ class RiskParityStrategy4A(BaseStrategy):
     def __init__(self):
         super().__init__()
 
-        # 所有腿成员（6 只 ETF）
-        self.symbols: List[str] = []
-        for leg in LEG_NAMES:
-            self.symbols.extend(LEG_CONFIG[leg]["members"])
+        # 将外部配置解析为独立快照，加载、计算、交易均使用同一标的池。
+        self.asset_config, self.leg_config = resolve_risk_parity_config(self.p.asset_config)
+        self.leg_names = list(self.leg_config)
+        self.symbols: List[str] = list(self.asset_config)
 
         self._data_by_symbol: Dict[str, bt.DataBase] = {}
         for data in self.datas:
@@ -135,8 +119,8 @@ class RiskParityStrategy4A(BaseStrategy):
 
         # 初始化时未预加载的 feed 还没有日期，配置日志无需读取未来 bar。
         self.logger.info(
-            f"策略初始化: 腿={LEG_NAMES}, 窗口={self.p.cov_window}, "
-            f"每日检查, 阈值={self.p.rebalance_threshold:.2%}, 每腿风险预算={1 / len(LEG_NAMES):.2%}, "
+            f"策略初始化: 腿={self.leg_names}, 窗口={self.p.cov_window}, "
+            f"每日检查, 阈值={self.p.rebalance_threshold:.2%}, 每腿风险预算={1 / len(self.leg_names):.2%}, "
             f"佣金={self.p.commission:.4%}"
         )
 
@@ -182,7 +166,7 @@ class RiskParityStrategy4A(BaseStrategy):
             self._initialized = True
             self._log_decision(etf_targets, leg_targets, cov, rc, deviation=None)
             self.log(
-                f"初始建仓: 目标腿权重 {dict(zip(LEG_NAMES, np.round(leg_targets, 4)))}"
+                f"初始建仓: 目标腿权重 {dict(zip(self.leg_names, np.round(leg_targets, 4)))}"
             )
             return
 
@@ -198,19 +182,18 @@ class RiskParityStrategy4A(BaseStrategy):
         else:
             self.log("偏离未超阈值，不调仓")
 
-    def _compute_leg_weights(self):
-        """用截至 T-1 的 250 日收益计算 ERC 目标权重"""
+    def _leg_return_matrix(self):
+        """所有资产腿按其完整成员等权合成，收益窗口截至 T-1。"""
         window = self.p.cov_window
         cols = []
-        for leg in LEG_NAMES:
-            members = LEG_CONFIG[leg]["members"]
-            if leg == "commodity":
-                # 商品腿：三标的日内等权再平衡合成
-                combo = np.mean([self._rets[m][:-1][-window:] for m in members], axis=0)
-                cols.append(combo)
-            else:
-                cols.append(self._rets[members[0]][:-1][-window:])
-        leg_ret = np.column_stack(cols)
+        for leg in self.leg_names:
+            members = self.leg_config[leg]["members"]
+            cols.append(np.mean([self._rets[m][:-1][-window:] for m in members], axis=0))
+        return np.column_stack(cols)
+
+    def _compute_leg_weights(self):
+        """用截至 T-1 的 250 日收益计算 ERC 目标权重"""
+        leg_ret = self._leg_return_matrix()
 
         cov = ledoit_wolf_cov(leg_ret)
         # ERC 默认根据协方差维度 N 分配 1/N 风险预算，不区分股票或其他腿。
@@ -222,10 +205,10 @@ class RiskParityStrategy4A(BaseStrategy):
         return leg_w, cov, rc
 
     def _leg_to_etf_weights(self, leg_w: np.ndarray) -> Dict[str, float]:
-        """腿权重展开为 6 只 ETF 的目标权重（商品腿三等权）"""
+        """腿权重展开为当前标的池的目标权重，同腿各成员等权。"""
         targets: Dict[str, float] = {}
-        for i, leg in enumerate(LEG_NAMES):
-            members = LEG_CONFIG[leg]["members"]
+        for i, leg in enumerate(self.leg_names):
+            members = self.leg_config[leg]["members"]
             for m in members:
                 targets[m] = float(leg_w[i]) / len(members)
         return targets
@@ -257,11 +240,11 @@ class RiskParityStrategy4A(BaseStrategy):
             sizes[symbol] += size
             total -= commission
         if total <= 0:
-            return np.zeros(len(LEG_NAMES))
+            return np.zeros(len(self.leg_names))
         values = []
-        for leg in LEG_NAMES:
+        for leg in self.leg_names:
             v = 0.0
-            for m in LEG_CONFIG[leg]["members"]:
+            for m in self.leg_config[leg]["members"]:
                 v += sizes[m] * self._data_by_symbol[m].close[0]
             values.append(v)
         return np.array(values) / total
@@ -269,25 +252,15 @@ class RiskParityStrategy4A(BaseStrategy):
     def _log_decision(self, etf_targets, leg_targets, cov, rc, deviation):
         intensity = None
         try:
-            window = self.p.cov_window
-            cols = []
-            for leg in LEG_NAMES:
-                members = LEG_CONFIG[leg]["members"]
-                if leg == "commodity":
-                    cols.append(
-                        np.mean([self._rets[m][:-1][-window:] for m in members], axis=0)
-                    )
-                else:
-                    cols.append(self._rets[members[0]][:-1][-window:])
-            intensity = shrinkage_intensity(np.column_stack(cols))
+            intensity = shrinkage_intensity(self._leg_return_matrix())
         except Exception:
             pass
 
         current = self._current_leg_weights()
-        for i, leg in enumerate(LEG_NAMES):
-            member = LEG_CONFIG[leg]["members"][0]
+        for i, leg in enumerate(self.leg_names):
+            member = self.leg_config[leg]["members"][0]
             data = self._data_by_symbol[member]
-            leg_name = LEG_CONFIG[leg]["name"]
+            leg_name = self.leg_config[leg]["name"]
             dev_text = "" if deviation is None else f", 组合L1偏离={deviation:.2%}"
             self.log_signal(
                 signal_type="rebalance",
@@ -387,6 +360,6 @@ class RiskParityStrategy4A(BaseStrategy):
         if self.last_leg_weights is not None:
             self.log(
                 f"调仓次数: {self.rebalance_count}, "
-                f"最终腿权重: {dict(zip(LEG_NAMES, np.round(self.last_leg_weights, 4)))}, "
-                f"最终风险贡献: {dict(zip(LEG_NAMES, np.round(self.last_risk_contrib, 4)))}"
+                f"最终腿权重: {dict(zip(self.leg_names, np.round(self.last_leg_weights, 4)))}, "
+                f"最终风险贡献: {dict(zip(self.leg_names, np.round(self.last_risk_contrib, 4)))}"
             )

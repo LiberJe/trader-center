@@ -10,7 +10,7 @@ from trader_center.backtest.strategy import risk_parity as strategy_module
 
 
 @pytest.mark.parametrize("n_legs", [2, 3, 4, 5])
-def test_strategy_uses_equal_risk_for_configured_legs(monkeypatch, n_legs):
+def test_strategy_uses_equal_risk_for_configured_legs(n_legs):
     legs = {
         "equity" if i == 0 else f"asset_{i}": {
             "name": f"Asset {i}",
@@ -18,8 +18,8 @@ def test_strategy_uses_equal_risk_for_configured_legs(monkeypatch, n_legs):
         }
         for i in range(n_legs)
     }
-    monkeypatch.setattr(strategy_module, "LEG_CONFIG", legs)
-    monkeypatch.setattr(strategy_module, "LEG_NAMES", list(legs))
+    assets = {cfg["members"][0]: {"name": cfg["name"], "leg": key, "leg_name": cfg["name"]}
+              for key, cfg in legs.items()}
 
     class ObservedStrategy(strategy_module.RiskParityStrategy4A):
         def __init__(self):
@@ -39,7 +39,7 @@ def test_strategy_uses_equal_risk_for_configured_legs(monkeypatch, n_legs):
     prices = 10 * np.exp(np.cumsum(returns, axis=0))
     cerebro = bt.Cerebro()
     cerebro.broker.setcash(1_000_000)
-    cerebro.addstrategy(ObservedStrategy, cov_window=20)
+    cerebro.addstrategy(ObservedStrategy, cov_window=20, asset_config=assets)
     for i, leg in enumerate(legs.values()):
         frame = pd.DataFrame(
             {column: prices[:, i] for column in ["open", "high", "low", "close"]},
