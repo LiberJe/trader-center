@@ -2,7 +2,7 @@
 四资产风险平价策略任务运行器
 
 基于 ERC（等风险贡献）+ Ledoit-Wolf 收缩协方差的四资产组合策略：
-股票 / 利率债10Y / 黄金 / 商品三混合，阈值触发 + 月末强制检查的调仓机制。
+股票 / 利率债10Y / 黄金 / 商品三混合，每日检查 ERC，腿权重 L1 偏离超过 5% 才调仓。
 生成每日报告，指导次日交易决策。
 
 数据说明：
@@ -17,15 +17,18 @@ sys.path.insert(0, str(project_root))
 
 from datetime import date, datetime, timedelta
 from trader_center.backtest import BacktestRunner, BacktestConfig
-from trader_center.backtest.strategy import RiskParityStrategy4A, LEG_CONFIG
+from trader_center.backtest.strategy import RiskParityStrategy4A, resolve_risk_parity_config
 
 # 复用独立运行器的维度分析导出（腿级 + 标的级 权重/市值/净值曲线与明细）
 sys.path.insert(0, str(project_root / "backtest_runner"))
 from run_risk_parity import export_leg_analysis, export_symbol_analysis
 
+# 本任务的启动配置：完整替换策略内置标的池。main(asset_config=...) 可再次覆盖。
+# leg 支持中文名称、equity/bond/gold/commodity 或自定义腿键。
 ASSET_CONFIG = {
     # 股票腿
-    '510300.SH': {'name': '沪深300ETF', 'leg': '股票'},
+    # '510300.SH': {'name': '沪深300ETF', 'leg': '股票'},
+    '513100.SH': {'name': '纳指ETF', 'leg': '股票'},
     # 利率债腿
     '511260.SH': {'name': '十年国债ETF', 'leg': '利率债10Y'},
     # 黄金腿
@@ -36,14 +39,8 @@ ASSET_CONFIG = {
     '159980.SZ': {'name': '有色ETF', 'leg': '商品三混合'},
 }
 
-# 腿展示顺序（与策略 LEG_CONFIG 一致）
-LEG_ORDER = ['股票', '利率债10Y', '黄金', '商品三混合']
-
-# 策略信号中的腿键（英文）-> 中文腿名
-LEG_KEY_TO_NAME = {key: cfg['name'] for key, cfg in LEG_CONFIG.items()}
-
-
-def generate_daily_report(result, report_dir: Path, today_str: str, today_display: str):
+def generate_daily_report(result, report_dir: Path, today_str: str, today_display: str,
+                          asset_config=None):
     """
     生成每日Markdown报告
 
@@ -52,7 +49,15 @@ def generate_daily_report(result, report_dir: Path, today_str: str, today_displa
         report_dir: 报告目录
         today_str: 日期字符串 (YYYYMMDD)
         today_display: 显示日期 (YYYY年MM月DD日)
+        asset_config: 本次运行的完整标的配置；None 优先读取 result.params，
+            其中也未配置时使用策略内置默认标的池
     """
+    if asset_config is None:
+        asset_config = (result.params or {}).get('asset_config')
+    asset_config, leg_config = resolve_risk_parity_config(asset_config)
+    leg_order = [cfg['name'] for cfg in leg_config.values()]
+    leg_key_to_name = {key: cfg['name'] for key, cfg in leg_config.items()}
+    symbol_to_leg = {symbol: leg_key_to_name[info['leg']] for symbol, info in asset_config.items()}
     # 提取最新持仓数据
     latest_positions = []
     if result.position_log:
@@ -112,15 +117,15 @@ def generate_daily_report(result, report_dir: Path, today_str: str, today_displa
 
     # 按腿聚合最新持仓，并关联最新信号中的风险贡献
     total_value = latest_capital.get('total_value', result.final_value)
-    leg_stats = {leg: {'market_value': 0.0} for leg in LEG_ORDER}
+    leg_stats = {leg: {'market_value': 0.0} for leg in leg_order}
     for pos in latest_positions:
-        leg = ASSET_CONFIG.get(pos.get('symbol', ''), {}).get('leg')
+        leg = symbol_to_leg.get(pos.get('symbol', ''))
         if leg:
             leg_stats[leg]['market_value'] += pos.get('market_value', 0)
     for sig in latest_signals:
         ind = sig.get('indicator_values', {}) or {}
         leg = ind.get('leg')
-        leg_name = LEG_KEY_TO_NAME.get(leg, leg)
+        leg_name = leg_key_to_name.get(leg, leg)
         if leg_name in leg_stats:
             leg_stats[leg_name]['target_weight'] = float(ind.get('target_weight', 0) or 0)
             leg_stats[leg_name]['risk_contrib'] = float(ind.get('risk_contrib', 0) or 0)
@@ -151,7 +156,7 @@ def generate_daily_report(result, report_dir: Path, today_str: str, today_displa
 |--------|------|----------|----------|----------|
 """
 
-    for leg in LEG_ORDER:
+    for leg in leg_order:
         mv = leg_stats[leg]['market_value']
         weight = mv / total_value * 100 if total_value > 0 else 0
         target = leg_stats[leg].get('target_weight')
@@ -175,8 +180,8 @@ def generate_daily_report(result, report_dir: Path, today_str: str, today_displa
 
         for pos in latest_positions:
             symbol = pos.get('symbol', '')
-            name = ASSET_CONFIG.get(symbol, {}).get('name', symbol)
-            leg = ASSET_CONFIG.get(symbol, {}).get('leg', '')
+            name = asset_config.get(symbol, {}).get('name', symbol)
+            leg = symbol_to_leg.get(symbol, '')
             size = pos.get('size', 0)
             cost = pos.get('cost_price', 0)
             current = pos.get('current_price', 0)
@@ -204,7 +209,7 @@ def generate_daily_report(result, report_dir: Path, today_str: str, today_displa
             order_time = order.get('datetime', '')
             action = order.get('action', '')
             symbol = order.get('symbol', '')
-            name = ASSET_CONFIG.get(symbol, {}).get('name', symbol)
+            name = asset_config.get(symbol, {}).get('name', symbol)
             size = order.get('executed_size', 0) or 0
             price = order.get('executed_price', 0) or 0
             value = size * price
@@ -225,7 +230,7 @@ def generate_daily_report(result, report_dir: Path, today_str: str, today_displa
         for sig in signals:
             sig_type = sig.get('signal_type', '')
             symbol = sig.get('symbol', '')
-            name = ASSET_CONFIG.get(symbol, {}).get('name', symbol)
+            name = asset_config.get(symbol, {}).get('name', symbol)
             trigger = sig.get('trigger_condition', '')
             ind = sig.get('indicator_values', {}) or {}
 
@@ -233,8 +238,8 @@ def generate_daily_report(result, report_dir: Path, today_str: str, today_displa
             if sig_type == 'rebalance':
                 leg_key = ind.get('leg')
                 leg_name = (
-                    ASSET_CONFIG.get(symbol, {}).get('leg')
-                    or LEG_KEY_TO_NAME.get(leg_key, leg_key or symbol)
+                    symbol_to_leg.get(symbol)
+                    or leg_key_to_name.get(leg_key, leg_key or symbol)
                 )
                 current_w = float(ind.get('current_weight', 0) or 0)
                 target_w = float(ind.get('target_weight', 0) or 0)
@@ -281,7 +286,7 @@ def generate_daily_report(result, report_dir: Path, today_str: str, today_displa
 
 ---
 *报告生成时间: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}*
-*策略: 四资产风险平价策略（ERC + LW收缩 + 阈值调仓，规格书v3.2）*
+*策略: 四资产风险平价策略（ERC + LW收缩 + 每日检查、5%阈值调仓，规格书v3.2）*
 """
 
     # 保存报告
@@ -292,7 +297,13 @@ def generate_daily_report(result, report_dir: Path, today_str: str, today_displa
     return report_path
 
 
-def main(report_subdir: str = None):
+def main(report_subdir: str = None, asset_config=None):
+    # 启动处解析一次，数据加载、策略参数、报告与分析均传递同一配置。
+    asset_config, leg_config = resolve_risk_parity_config(
+        ASSET_CONFIG if asset_config is None else asset_config
+    )
+    leg_order = [cfg['name'] for cfg in leg_config.values()]
+    symbol_to_leg = {symbol: leg_config[info['leg']]['name'] for symbol, info in asset_config.items()}
     # 获取当天日期
     today = date.today() - timedelta(days=0)
     today_str = today.strftime("%Y%m%d")
@@ -309,8 +320,8 @@ def main(report_subdir: str = None):
     report_dir.mkdir(parents=True, exist_ok=True)
 
     # 资产池
-    symbols = list(ASSET_CONFIG.keys())
-    asset_names = [ASSET_CONFIG[s]['name'] for s in symbols]
+    symbols = list(asset_config.keys())
+    asset_names = [asset_config[s]['name'] for s in symbols]
 
     print("=" * 60)
     print("四资产风险平价策略回测")
@@ -346,6 +357,7 @@ def main(report_subdir: str = None):
         end=today.strftime("%Y-%m-%d"),
         initial_cash=config.initial_cash,
         strategy_params={
+            'asset_config': asset_config,
             'cov_window': 250,            # 协方差滚动估计窗口（交易日）
             'rebalance_threshold': 0.05,  # 调仓触发阈值（Σ|实际-目标|，L1 偏离）
             'commission': 0.0005,         # 单边佣金率（5bp）
@@ -388,12 +400,12 @@ def main(report_subdir: str = None):
                 if not latest_cap.empty:
                     total_value = latest_cap.iloc[0]['total_value']
 
-            leg_values = {leg: 0.0 for leg in LEG_ORDER}
+            leg_values = {leg: 0.0 for leg in leg_order}
             for _, pos in latest_pos.iterrows():
-                leg = ASSET_CONFIG.get(pos['symbol'], {}).get('leg')
+                leg = symbol_to_leg.get(pos['symbol'])
                 if leg:
                     leg_values[leg] += pos['market_value']
-            for leg in LEG_ORDER:
+            for leg in leg_order:
                 mv = leg_values[leg]
                 weight = mv / total_value * 100 if total_value > 0 else 0
                 print(f"  {leg}: 市值 {mv:,.0f} (权重 {weight:.1f}%)")
@@ -401,7 +413,7 @@ def main(report_subdir: str = None):
             print("\n当前持仓:")
             for _, pos in latest_pos.iterrows():
                 symbol = pos['symbol']
-                name = ASSET_CONFIG.get(symbol, {}).get('name', symbol)
+                name = asset_config.get(symbol, {}).get('name', symbol)
                 mv = pos['market_value']
                 weight = mv / total_value * 100 if total_value > 0 else 0
                 pnl = pos['pnl_ratio'] * 100
@@ -410,7 +422,8 @@ def main(report_subdir: str = None):
     # 生成每日报告
     print("\n生成每日报告...")
     try:
-        report_path = generate_daily_report(result, report_dir, today_str, today_display)
+        report_path = generate_daily_report(result, report_dir, today_str, today_display,
+                                            asset_config=asset_config)
         print(f"报告已保存: {report_path}")
     except Exception as e:
         print(f"生成报告失败: {e}")
@@ -418,8 +431,8 @@ def main(report_subdir: str = None):
     # 维度分析：资产类别（腿）级 + 标的（ETF）级，权重/市值/净值曲线 + 明细数据
     print("\n导出维度分析...")
     try:
-        result.log_files.update(export_leg_analysis(result, LEG_CONFIG, report_dir))
-        result.log_files.update(export_symbol_analysis(result, LEG_CONFIG, report_dir))
+        result.log_files.update(export_leg_analysis(result, leg_config, report_dir))
+        result.log_files.update(export_symbol_analysis(result, leg_config, report_dir))
         print("维度分析已导出")
     except Exception as e:
         print(f"导出维度分析失败: {e}")
@@ -435,6 +448,8 @@ def main(report_subdir: str = None):
         "status": "error" if result.error_message else "success",
         "report_path": str(report_path) if 'report_path' in locals() else None,
         "error_message": result.error_message,
+        "asset_config": asset_config,
+        "leg_config": leg_config,
         "metrics": {
             "return_pct": result.return_pct,
             "max_drawdown": result.calculate_max_drawdown(),
@@ -466,14 +481,14 @@ def main(report_subdir: str = None):
                     if not latest_cap.empty:
                         total_value = latest_cap.iloc[0]['total_value']
 
-                leg_values = {leg: 0.0 for leg in LEG_ORDER}
+                leg_values = {leg: 0.0 for leg in leg_order}
                 for _, pos in latest_pos.iterrows():
-                    leg = ASSET_CONFIG.get(pos['symbol'], {}).get('leg')
+                    leg = symbol_to_leg.get(pos['symbol'])
                     if leg:
                         leg_values[leg] += pos['market_value']
 
                 holdings = []
-                for leg in LEG_ORDER:
+                for leg in leg_order:
                     mv = leg_values[leg]
                     if mv > 0:
                         weight = mv / total_value * 100 if total_value > 0 else 0
@@ -509,10 +524,10 @@ def main(report_subdir: str = None):
                     sigs = []
                     for _, sig in today_signals.iterrows():
                         symbol = sig['symbol']
-                        name = ASSET_CONFIG.get(symbol, {}).get('name', symbol)
+                        name = asset_config.get(symbol, {}).get('name', symbol)
                         ind = sig.get('indicator_values', {}) or {}
                         leg = ind.get('leg')
-                        leg_name = ASSET_CONFIG.get(symbol, {}).get('leg', leg or name)
+                        leg_name = symbol_to_leg.get(symbol, leg or name)
                         sigs.append(f"{leg_name} ({sig['signal_type']})")
                     signals_summary = ", ".join(sigs)
                 else:
@@ -521,10 +536,10 @@ def main(report_subdir: str = None):
                     if not latest_signals.empty:
                         sig = latest_signals.iloc[-1]
                         symbol = sig['symbol']
-                        name = ASSET_CONFIG.get(symbol, {}).get('name', symbol)
+                        name = asset_config.get(symbol, {}).get('name', symbol)
                         ind = sig.get('indicator_values', {}) or {}
                         leg = ind.get('leg')
-                        leg_name = ASSET_CONFIG.get(symbol, {}).get('leg', leg or name)
+                        leg_name = symbol_to_leg.get(symbol, leg or name)
                         signals_summary = f"最新信号 ({latest_sig_date}): {leg_name} ({sig['signal_type']})"
         result_dict["signals_summary"] = signals_summary
     except Exception:

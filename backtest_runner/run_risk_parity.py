@@ -15,6 +15,9 @@
     # 从本地 CSV 加载数据（文件名为 {code}.csv，如 510300.SH.csv）
     python backtest_runner/run_risk_parity.py --source csv --csv-dir research/etf4_rp/data
 
+    # 外部完整标的配置（与任务运行器 ASSET_CONFIG 同结构）
+    python backtest_runner/run_risk_parity.py --asset-config my_assets.json
+
 产出（logs/backtest/risk_parity_4a/{run_id}/）：
 - kline*.png：backtrader K线图（6 只 ETF）
 - plot.png：资产曲线/回撤/收益分布/绩效摘要四联图
@@ -31,6 +34,7 @@
 """
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -39,10 +43,7 @@ import pandas as pd
 
 from trader_center.backtest import BacktestRunner, BacktestConfig
 from trader_center.backtest.data_feed import PandasDataFeed
-from trader_center.backtest.strategy import RiskParityStrategy4A, LEG_CONFIG
-
-# 6 只 ETF
-SYMBOLS = [m for leg in LEG_CONFIG.values() for m in leg["members"]]
+from trader_center.backtest.strategy import RiskParityStrategy4A, resolve_risk_parity_config
 
 # ---------------------------------------------------------------------------
 # 默认配置（命令行未提供参数时使用）
@@ -164,13 +165,21 @@ LEG_COLORS = {
 }
 
 
+def _leg_colors(leg_config):
+    """Default leg colors plus deterministic colors for externally added legs."""
+    fallback = ["#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#17becf", "#bcbd22"]
+    return {leg: LEG_COLORS.get(leg, fallback[i % len(fallback)])
+            for i, leg in enumerate(leg_config)}
+
+
 def _symbol_colors(leg_config):
     """为每只 ETF 生成颜色：按所属腿取基色，同腿内按深浅区分"""
     import matplotlib.colors as mcolors
 
     colors = {}
+    leg_colors = _leg_colors(leg_config)
     for leg, cfg in leg_config.items():
-        base = mcolors.to_rgb(LEG_COLORS[leg])
+        base = mcolors.to_rgb(leg_colors[leg])
         members = cfg["members"]
         n = len(members)
         shades = (
@@ -376,7 +385,7 @@ def export_leg_analysis(result, leg_config, output_dir: Path) -> dict:
     """
     groups = {leg: leg_config[leg]["members"] for leg in leg_config}
     display = {leg: leg_config[leg]["name"] for leg in leg_config}
-    colors = {display[leg]: LEG_COLORS[leg] for leg in leg_config}
+    colors = {display[leg]: color for leg, color in _leg_colors(leg_config).items()}
     return _export_group(
         result,
         groups,
@@ -408,10 +417,14 @@ def export_symbol_analysis(result, leg_config, output_dir: Path) -> dict:
     )
 
 
-def main():
+def main(asset_config=None):
     parser = argparse.ArgumentParser(
         description="四资产风险平价策略回测（规格书 v3.2）",
         epilog="所有参数均有默认配置（help 中标注），命令行提供时覆盖。",
+    )
+    parser.add_argument(
+        "--asset-config", type=Path,
+        help="完整标的配置 JSON 文件：{代码: {name, leg}}；未提供时使用内置默认值",
     )
     parser.add_argument(
         "--start",
@@ -482,6 +495,14 @@ def main():
     )
     args = parser.parse_args()
 
+    try:
+        if args.asset_config is not None:
+            asset_config = json.loads(args.asset_config.read_text(encoding="utf-8-sig"))
+        asset_config, leg_config = resolve_risk_parity_config(asset_config)
+    except (OSError, ValueError) as exc:
+        parser.error(f"资产配置无效: {exc}")
+    symbols = list(asset_config)
+
     # 解析有效配置：命令行优先，回落到默认配置
     start = args.start or DEFAULTS["start"]
     end = args.end or DEFAULTS["end"]
@@ -489,7 +510,7 @@ def main():
     enable_plot = DEFAULTS["plot"] if args.no_plot is None else not args.no_plot
     enable_report = DEFAULTS["report"] if args.no_report is None else not args.no_report
 
-    strategy_params = {}
+    strategy_params = {"asset_config": asset_config}
     for arg_name, param_name in _STRATEGY_ARG_MAP.items():
         value = getattr(args, arg_name)
         strategy_params[param_name] = (
@@ -500,7 +521,7 @@ def main():
     print("四资产风险平价策略（规格书 v3.2）")
     print("=" * 64)
     print("\n资产标的:")
-    for leg, cfg in LEG_CONFIG.items():
+    for leg, cfg in leg_config.items():
         print(f"  [{cfg['name']}] {' + '.join(cfg['members'])}")
     print("\n回测参数（默认值可被命令行覆盖）:")
     print(
@@ -510,10 +531,10 @@ def main():
     print(f"  权重方法: ERC（LW收缩, 窗口 {strategy_params['cov_window']}）")
     print(
         f"  调仓阈值: Σ|实际-目标| > {strategy_params['rebalance_threshold']:.2%}，"
-        "月末强制检查"
+        "每日收盘检查"
     )
     print(
-        f"  每腿风险预算: 1/{len(LEG_CONFIG)} = {1 / len(LEG_CONFIG):.2%}，"
+        f"  每腿风险预算: 1/{len(leg_config)} = {1 / len(leg_config):.2%}，"
         f"佣金: {strategy_params['commission']:.4%}/单边，"
         f"印花税: {strategy_params['stamp_duty']:.4%}，"
         f"最低佣金: {strategy_params['min_commission']:g} 元"
@@ -542,7 +563,7 @@ def main():
 
     result = runner.run(
         strategy=RiskParityStrategy4A,
-        symbols=SYMBOLS,
+        symbols=symbols,
         start=start,
         end=end,
         initial_cash=cash,
@@ -576,10 +597,10 @@ def main():
     # 维度分析：资产类别（腿）级 + 标的（ETF）级，权重/市值/净值曲线 + 明细数据
     try:
         result.log_files.update(
-            export_leg_analysis(result, LEG_CONFIG, config.trade_log_dir)
+            export_leg_analysis(result, leg_config, config.trade_log_dir)
         )
         result.log_files.update(
-            export_symbol_analysis(result, LEG_CONFIG, config.trade_log_dir)
+            export_symbol_analysis(result, leg_config, config.trade_log_dir)
         )
     except Exception as e:
         print(f"导出维度分析失败: {e}")
