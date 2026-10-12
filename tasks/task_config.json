@@ -11,6 +11,12 @@
       "script": "band_position_runner.py",
       "description": "分仓波段策略",
       "enabled": true
+    },
+    {
+      "name": "risk_parity",
+      "script": "risk_parity_runner.py",
+      "description": "四资产风险平价策略",
+      "enabled": true
     }
   ]
 }

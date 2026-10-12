@@ -11,6 +11,12 @@ from .factor_scorer import (
 )
 from .multi_factor_rotation import MultiFactorRotationStrategy
 from .etf_sharp import ETFSharpStrategy
+from .risk_parity import RiskParityStrategy4A, LEG_CONFIG
+from .risk_parity_math import (
+    ledoit_wolf_cov,
+    erc_weights,
+    risk_contributions,
+)
 
 __all__ = [
     "BaseStrategy",
@@ -22,4 +28,9 @@ __all__ = [
     "DEFAULT_NORMALIZATION_CONFIG",
     "MultiFactorRotationStrategy",
     "ETFSharpStrategy",
+    "RiskParityStrategy4A",
+    "LEG_CONFIG",
+    "ledoit_wolf_cov",
+    "erc_weights",
+    "risk_contributions",
 ]

@@ -1,0 +1,165 @@
+============================================================
+每日任务汇总 Runner
+============================================================
+
+共配置 3 个任务，启用 3 个
+
+============================================================
+执行任务: etf_sharp (ETF夏普比率轮动策略)
+============================================================
+
+  0%|          | 0/1 [00:00<?, ?it/s]
+100%|██████████| 1/1 [00:00<00:00,  2.58it/s]
+                                             
+
+  0%|          | 0/1 [00:00<?, ?it/s]
+100%|██████████| 1/1 [00:00<00:00,  2.58it/s]
+                                             
+
+  0%|          | 0/1 [00:00<?, ?it/s]
+100%|██████████| 1/1 [00:00<00:00,  2.48it/s]
+                                             
+
+  0%|          | 0/1 [00:00<?, ?it/s]
+100%|██████████| 1/1 [00:00<00:00,  2.54it/s]
+                                             
+
+  0%|          | 0/1 [00:00<?, ?it/s]
+100%|██████████| 1/1 [00:00<00:00,  2.59it/s]
+                                             
+
+  0%|          | 0/1 [00:00<?, ?it/s]
+100%|██████████| 1/1 [00:00<00:00,  2.65it/s]
+                                             
+
+  0%|          | 0/1 [00:00<?, ?it/s]
+100%|██████████| 1/1 [00:00<00:00,  2.48it/s]
+                                             
+
+  0%|          | 0/1 [00:00<?, ?it/s]
+100%|██████████| 1/1 [00:00<00:00,  2.49it/s]
+                                             
+
+  0%|          | 0/1 [00:00<?, ?it/s]
+100%|██████████| 1/1 [00:00<00:00,  2.70it/s]
+                                             
+
+  0%|          | 0/1 [00:00<?, ?it/s]
+100%|██████████| 1/1 [00:00<00:00,  2.36it/s]
+                                             
+
+  0%|          | 0/1 [00:00<?, ?it/s]
+100%|██████████| 1/1 [00:00<00:00,  2.34it/s]
+                                             
+C:\workspace\trader-center\trader_center\backtest\runner.py:609: UserWarning: Glyph 22799 (\N{CJK UNIFIED IDEOGRAPH-590F}) missing from font(s) DejaVu Sans Mono.
+  plt.tight_layout()
+C:\workspace\trader-center\trader_center\backtest\runner.py:609: UserWarning: Glyph 26222 (\N{CJK UNIFIED IDEOGRAPH-666E}) missing from font(s) DejaVu Sans Mono.
+  plt.tight_layout()
+C:\workspace\trader-center\trader_center\backtest\runner.py:617: UserWarning: Glyph 22799 (\N{CJK UNIFIED IDEOGRAPH-590F}) missing from font(s) DejaVu Sans Mono.
+  plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+C:\workspace\trader-center\trader_center\backtest\runner.py:617: UserWarning: Glyph 26222 (\N{CJK UNIFIED IDEOGRAPH-666E}) missing from font(s) DejaVu Sans Mono.
+  plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+  [成功] etf_sharp
+         收益率: +239.36%, 夏普: 1.14
+
+============================================================
+执行任务: band_position (分仓波段策略)
+============================================================
+
+  0%|          | 0/1 [00:00<?, ?it/s]
+100%|██████████| 1/1 [00:00<00:00,  3.04it/s]
+                                             
+
+  0%|          | 0/1 [00:00<?, ?it/s]
+100%|██████████| 1/1 [00:00<00:00,  2.17it/s]
+                                             
+C:\Python314\Lib\tkinter\__init__.py:876: UserWarning: Glyph 22799 (\N{CJK UNIFIED IDEOGRAPH-590F}) missing from font(s) DejaVu Sans Mono.
+  func(*args, **kw)
+C:\Python314\Lib\tkinter\__init__.py:876: UserWarning: Glyph 26222 (\N{CJK UNIFIED IDEOGRAPH-666E}) missing from font(s) DejaVu Sans Mono.
+  func(*args, **kw)
+C:\Python314\Lib\tkinter\__init__.py:876: UserWarning: Glyph 22799 (\N{CJK UNIFIED IDEOGRAPH-590F}) missing from font(s) DejaVu Sans Mono.
+  func(*args, **kw)
+C:\Python314\Lib\tkinter\__init__.py:876: UserWarning: Glyph 26222 (\N{CJK UNIFIED IDEOGRAPH-666E}) missing from font(s) DejaVu Sans Mono.
+  func(*args, **kw)
+C:\workspace\trader-center\trader_center\backtest\runner.py:609: UserWarning: Glyph 22799 (\N{CJK UNIFIED IDEOGRAPH-590F}) missing from font(s) DejaVu Sans Mono.
+  plt.tight_layout()
+C:\workspace\trader-center\trader_center\backtest\runner.py:609: UserWarning: Glyph 26222 (\N{CJK UNIFIED IDEOGRAPH-666E}) missing from font(s) DejaVu Sans Mono.
+  plt.tight_layout()
+C:\workspace\trader-center\trader_center\backtest\runner.py:617: UserWarning: Glyph 22799 (\N{CJK UNIFIED IDEOGRAPH-590F}) missing from font(s) DejaVu Sans Mono.
+  plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+C:\workspace\trader-center\trader_center\backtest\runner.py:617: UserWarning: Glyph 26222 (\N{CJK UNIFIED IDEOGRAPH-666E}) missing from font(s) DejaVu Sans Mono.
+  plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+  [成功] band_position
+         收益率: +136.36%, 夏普: 0.74
+
+============================================================
+执行任务: risk_parity (四资产风险平价策略)
+============================================================
+
+  0%|          | 0/1 [00:00<?, ?it/s]
+100%|██████████| 1/1 [00:00<00:00,  1.92it/s]
+                                             
+
+  0%|          | 0/1 [00:00<?, ?it/s]
+100%|██████████| 1/1 [00:00<00:00,  2.56it/s]
+                                             
+
+  0%|          | 0/1 [00:00<?, ?it/s]
+100%|██████████| 1/1 [00:00<00:00,  2.53it/s]
+                                             
+
+  0%|          | 0/1 [00:00<?, ?it/s]
+100%|██████████| 1/1 [00:00<00:00,  2.66it/s]
+                                             
+
+  0%|          | 0/1 [00:00<?, ?it/s]
+100%|██████████| 1/1 [00:00<00:00,  2.33it/s]
+                                             
+
+  0%|          | 0/1 [00:00<?, ?it/s]
+100%|██████████| 1/1 [00:00<00:00,  3.18it/s]
+                                             
+
+  0%|          | 0/1 [00:00<?, ?it/s]
+100%|██████████| 1/1 [00:00<00:00,  2.47it/s]
+                                             
+
+  0%|          | 0/1 [00:00<?, ?it/s]
+100%|██████████| 1/1 [00:00<00:00,  2.95it/s]
+                                             
+
+  0%|          | 0/1 [00:00<?, ?it/s]
+100%|██████████| 1/1 [00:00<00:00,  2.16it/s]
+                                             
+
+  0%|          | 0/1 [00:00<?, ?it/s]
+100%|██████████| 1/1 [00:00<00:00,  2.45it/s]
+                                             
+C:\Python314\Lib\tkinter\__init__.py:876: UserWarning: Glyph 22799 (\N{CJK UNIFIED IDEOGRAPH-590F}) missing from font(s) DejaVu Sans Mono.
+  func(*args, **kw)
+C:\Python314\Lib\tkinter\__init__.py:876: UserWarning: Glyph 26222 (\N{CJK UNIFIED IDEOGRAPH-666E}) missing from font(s) DejaVu Sans Mono.
+  func(*args, **kw)
+C:\Python314\Lib\tkinter\__init__.py:876: UserWarning: Glyph 22799 (\N{CJK UNIFIED IDEOGRAPH-590F}) missing from font(s) DejaVu Sans Mono.
+  func(*args, **kw)
+C:\Python314\Lib\tkinter\__init__.py:876: UserWarning: Glyph 26222 (\N{CJK UNIFIED IDEOGRAPH-666E}) missing from font(s) DejaVu Sans Mono.
+  func(*args, **kw)
+C:\workspace\trader-center\trader_center\backtest\runner.py:609: UserWarning: Glyph 22799 (\N{CJK UNIFIED IDEOGRAPH-590F}) missing from font(s) DejaVu Sans Mono.
+  plt.tight_layout()
+C:\workspace\trader-center\trader_center\backtest\runner.py:609: UserWarning: Glyph 26222 (\N{CJK UNIFIED IDEOGRAPH-666E}) missing from font(s) DejaVu Sans Mono.
+  plt.tight_layout()
+C:\workspace\trader-center\trader_center\backtest\runner.py:617: UserWarning: Glyph 22799 (\N{CJK UNIFIED IDEOGRAPH-590F}) missing from font(s) DejaVu Sans Mono.
+  plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+C:\workspace\trader-center\trader_center\backtest\runner.py:617: UserWarning: Glyph 26222 (\N{CJK UNIFIED IDEOGRAPH-666E}) missing from font(s) DejaVu Sans Mono.
+  plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+  [成功] risk_parity
+         收益率: +39.00%, 夏普: 0.66
+
+============================================================
+生成汇总报告...
+============================================================
+
+汇总报告已保存: C:\workspace\trader-center\task_reports\20261013\daily_summary.md
+
+============================================================
+全部完成
+============================================================
