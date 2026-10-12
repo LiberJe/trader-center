@@ -7,12 +7,12 @@
 - 黄金：    518880.SH 黄金ETF
 - 商品：    159981.SZ 能源化工 + 159985.SZ 豆粕 + 159980.SZ 有色（三等权合成一条腿）
 
-规则（继承规格书 v2 核心参数，全部冻结于 2024-12-31 样本）：
+规则（沿用规格书 v3.2 参数，2026-10-13 起改为每日检查）：
 - 权重方法：按资产腿分配等风险预算，每腿 1/N；w ≥ 0，Σw = 1
 - 协方差：Ledoit-Wolf (2004, Honey) 收缩，滚动 250 个交易日，
   估计窗口截至 T-1 收盘（无前视偏差）
-- 调仓机制：Σ|实际权重 − 目标权重| > 5% 触发；
-  每月最后一个交易日强制检查（检查 ≠ 无条件调仓）
+- 调仓机制：每个交易日收盘检查最新 ERC 目标；
+  Σ|实际权重 − 目标权重| > 5% 才触发（每日检查 ≠ 每日交易）
 - 执行时点：触发日收盘计算，T+1 收盘生效（broker cheat-on-close 实现）
 - 持有方式：调仓间自然漂移，不每日再平衡
 - 交易成本：5bp / 单位单边换手，ETF 无印花税、无最低佣金
@@ -21,6 +21,8 @@
 实现说明：
 - 佣金与成交方式由策略在 __init__ 中写入 broker（覆盖运行器默认的
   A股佣金方案），使策略自包含、可在任意 BacktestRunner 下复现。
+- cheat-on-close 成交回报延后一根 bar；执行日的阈值检查计入当日
+  已提交且资金可覆盖的收盘订单，避免用调仓前仓位重复触发。
 """
 
 from typing import Dict, List, Optional
@@ -68,7 +70,7 @@ class RiskParityStrategy4A(BaseStrategy):
     四资产风险平价策略（规格书 v3.2）
 
     以 4 条宏观腿（A股 / 10Y国债 / 黄金 / 商品三混合）构建等风险贡献组合，
-    协方差使用 Ledoit-Wolf 收缩估计，阈值触发 + 月末强制检查的调仓机制，
+    协方差使用 Ledoit-Wolf 收缩估计，每日检查、偏离超过阈值才调仓，
     T+1 收盘执行。
 
     Params:
@@ -80,7 +82,7 @@ class RiskParityStrategy4A(BaseStrategy):
     """
 
     name = "risk_parity_4a"
-    description = "四资产风险平价策略（ERC + LW收缩 + 阈值调仓，规格书v3.2）"
+    description = "四资产风险平价策略（ERC + LW收缩 + 每日阈值检查，规格书v3.2）"
 
     params = (
         ("cov_window", 250),
@@ -115,6 +117,7 @@ class RiskParityStrategy4A(BaseStrategy):
 
         self._initialized = False
         self._pending_targets: Optional[Dict[str, float]] = None
+        self._rebalance_orders_today: List[bt.Order] = []
         self.rebalance_count = 0
         self.last_leg_weights: Optional[np.ndarray] = None
         self.last_risk_contrib: Optional[np.ndarray] = None
@@ -130,9 +133,10 @@ class RiskParityStrategy4A(BaseStrategy):
             )
         )
 
-        self.log(
+        # 初始化时未预加载的 feed 还没有日期，配置日志无需读取未来 bar。
+        self.logger.info(
             f"策略初始化: 腿={LEG_NAMES}, 窗口={self.p.cov_window}, "
-            f"阈值={self.p.rebalance_threshold:.2%}, 每腿风险预算={1 / len(LEG_NAMES):.2%}, "
+            f"每日检查, 阈值={self.p.rebalance_threshold:.2%}, 每腿风险预算={1 / len(LEG_NAMES):.2%}, "
             f"佣金={self.p.commission:.4%}"
         )
 
@@ -141,6 +145,8 @@ class RiskParityStrategy4A(BaseStrategy):
     # ------------------------------------------------------------------
 
     def next(self):
+        # 上一日订单已由 broker 处理；今日只投影本次 next() 提交的订单。
+        self._rebalance_orders_today = []
         self._log_daily_state()
 
         # 1) 执行上一交易日收盘计算出的调仓目标（T+1 收盘生效）
@@ -159,18 +165,8 @@ class RiskParityStrategy4A(BaseStrategy):
         if not self._initialized:
             if len(self._dates) >= self.p.cov_window + 1:
                 self._decide_rebalance(initial=True)
-        elif self._is_month_end():
+        else:
             self._decide_rebalance(initial=False)
-
-    def _is_month_end(self) -> bool:
-        """判断当前 bar 是否为本月最后一个交易日"""
-        data0 = self.datas[0]
-        this_month = data0.datetime.date(0).month
-        try:
-            next_month = data0.datetime.date(1).month
-        except IndexError:
-            return True  # 最后一个 bar
-        return next_month != this_month
 
     # ------------------------------------------------------------------
     # 决策
@@ -193,7 +189,7 @@ class RiskParityStrategy4A(BaseStrategy):
         current_legs = self._current_leg_weights()
         deviation = float(np.sum(np.abs(current_legs - leg_targets)))
         self.log(
-            f"月末检查: 腿偏离(L1)={deviation:.2%} (阈值 {self.p.rebalance_threshold:.2%})"
+            f"每日检查: 腿偏离(L1)={deviation:.2%} (阈值 {self.p.rebalance_threshold:.2%})"
         )
 
         if deviation > self.p.rebalance_threshold:
@@ -235,16 +231,38 @@ class RiskParityStrategy4A(BaseStrategy):
         return targets
 
     def _current_leg_weights(self) -> np.ndarray:
-        """当前各腿实际权重（按 T 收盘市值）"""
+        """按 T 收盘估值，决策时计入当日资金可覆盖的 COC 收盘订单。
+
+        broker 在下一根 bar 才交付当日收盘成交。按提交顺序投影仓位与
+        佣金，保证执行日的检查使用成交后仓位；下一日清空投影并使用
+        broker 已确认的实际仓位。资金检查与先卖后买的顺序保持一致。
+        """
         total = self.broker.getvalue()
+        sizes = {
+            symbol: self.getposition(self._data_by_symbol[symbol]).size
+            for symbol in self.symbols
+        }
+        available_cash = self.broker.getcash()
+        for order in self._rebalance_orders_today:
+            if not order.alive():
+                continue
+            symbol = order.data._name
+            size = order.created.size - order.executed.size
+            price = order.created.pclose
+            commission = self.broker.getcommissioninfo(order.data).getcommission(size, price)
+            available_cash -= size * price + commission
+            if available_cash < 0:
+                # Broker 的提交检查会拒绝资金不足的订单，不计其仓位与佣金。
+                continue
+            sizes[symbol] += size
+            total -= commission
         if total <= 0:
             return np.zeros(len(LEG_NAMES))
         values = []
         for leg in LEG_NAMES:
             v = 0.0
             for m in LEG_CONFIG[leg]["members"]:
-                pos = self.getposition(self._data_by_symbol[m])
-                v += pos.size * self._data_by_symbol[m].close[0]
+                v += sizes[m] * self._data_by_symbol[m].close[0]
             values.append(v)
         return np.array(values) / total
 
@@ -331,9 +349,11 @@ class RiskParityStrategy4A(BaseStrategy):
 
         # 先卖出（降权重），按超配幅度从大到小
         for symbol in sells:
-            self.order_target_percent(
+            order = self.order_target_percent(
                 data=self._data_by_symbol[symbol], target=targets[symbol]
             )
+            if order is not None:
+                self._rebalance_orders_today.append(order)
 
         # 后买入：整手数量在本地预算内计算，逐单扣减（含佣金与 0.1% 缓冲）
         for symbol in buys:
@@ -349,7 +369,9 @@ class RiskParityStrategy4A(BaseStrategy):
                 self.log(f"资金不足，跳过加仓 {symbol}")
                 continue
             budget -= size * price * (1.0 + self.p.commission + 0.001)
-            self.buy(data=data, size=size)
+            order = self.buy(data=data, size=size)
+            if order is not None:
+                self._rebalance_orders_today.append(order)
 
         self.log(
             f"执行调仓 #{self.rebalance_count}: "

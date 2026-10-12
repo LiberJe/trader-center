@@ -510,7 +510,7 @@ def main():
     print(f"  权重方法: ERC（LW收缩, 窗口 {strategy_params['cov_window']}）")
     print(
         f"  调仓阈值: Σ|实际-目标| > {strategy_params['rebalance_threshold']:.2%}，"
-        "月末强制检查"
+        "每日收盘检查"
     )
     print(
         f"  每腿风险预算: 1/{len(LEG_CONFIG)} = {1 / len(LEG_CONFIG):.2%}，"
