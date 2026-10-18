@@ -76,7 +76,7 @@ def generate_daily_report(result, report_dir: Path, today_str: str, today_displa
         df_sig = pd.DataFrame(result.signal_log)
         if not df_sig.empty:
             df_sig['datetime'] = pd.to_datetime(df_sig['datetime'])
-            signal_types = ['buy', 'rebalance', 'stop_loss', 'trailing_stop']
+            signal_types = ['buy', 'sell', 'rebalance', 'stop_loss', 'trailing_stop']
             df_sig = df_sig[df_sig['signal_type'].isin(signal_types)]
             today_signals = df_sig[df_sig['datetime'].dt.date == today].to_dict('records')
             latest_sig_date = df_sig['datetime'].dt.date.max()
@@ -409,7 +409,7 @@ def main(report_subdir: str = None):
             df_sig = pd.DataFrame(result.signal_log)
             if not df_sig.empty:
                 df_sig['datetime'] = pd.to_datetime(df_sig['datetime'])
-                signal_types = ['buy', 'rebalance', 'stop_loss', 'trailing_stop']
+                signal_types = ['buy', 'sell', 'rebalance', 'stop_loss', 'trailing_stop']
                 df_sig = df_sig[df_sig['signal_type'].isin(signal_types)]
                 today = datetime.strptime(today_str, "%Y%m%d").date()
                 today_signals = df_sig[df_sig['datetime'].dt.date == today]
